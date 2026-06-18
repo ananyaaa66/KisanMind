@@ -29,3 +29,9 @@ Thumbs.db
 
 # Reports output
 Backend/data/reports/
+
+# Datasets
+Dataset/
+*.csv
+
+catboost_info/
