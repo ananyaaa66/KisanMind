@@ -16,14 +16,17 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 load_dotenv()
 
+import os
 from graph.pipeline import run_pipeline
 from memory.long_term import get_history, save_report, search_similar
 from models.state import create_initial_state
 from utils.image_handler import upload_to_base64, validate_image_size
 from utils.llm_provider import get_provider_info
+from utils.pdf_generator import generate_pdf
 
 # ──────────────────────────────────────────────
 # App Setup
@@ -117,6 +120,31 @@ async def create_advisory(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+
+
+# ──────────────────────────────────────────────
+# POST /advisory/pdf
+# ──────────────────────────────────────────────
+
+@app.post("/advisory/pdf")
+async def download_advisory_pdf(
+    session_id: str = Form(..., description="Session ID"),
+    report: str = Form(..., description="Full markdown report content")
+):
+    """
+    Generate and download a PDF version of the advisory report.
+    """
+    try:
+        filepath = generate_pdf(report, session_id)
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="PDF generation failed")
+        return FileResponse(
+            path=filepath,
+            filename=f"kisanmind_report_{session_id[:8]}.pdf",
+            media_type="application/pdf"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
 
 # ──────────────────────────────────────────────

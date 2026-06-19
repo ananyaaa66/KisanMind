@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-ink: #0A0F0A;
+  --bg-panel: #0D1410;
+  --crop: #2ECC71;
+  --crop-bright: #3DDC84;
+  --lime: #A8FF60;
+  --card: rgba(20, 32, 22, 0.55);
+  --card-border: rgba(46, 204, 113, 0.14);
+  --text-dim: #8aa193;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(46,204,113,0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(168,255,96,0.05), transparent 55%),
+    var(--bg-ink);
+  color: #e6f2ea;
+  font-family: 'Sora', 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .glass {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 1.25rem;
+    transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
+  }
+  .glass:hover, .glass.active {
+    border-color: rgba(46,204,113,0.45);
+    box-shadow: 0 0 0 1px rgba(46,204,113,0.18), 0 8px 40px -12px rgba(46,204,113,0.35);
+  }
+  .glow-green { box-shadow: 0 0 22px -4px rgba(46,204,113,0.55); }
+  .tap { min-height: 48px; min-width: 48px; }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.app-shell {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100%;
+  position: relative;
+}
+
+/* Green-track range sliders */
+.kis-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #2ECC71, #A8FF60), rgba(255,255,255,0.08);
+  background-blend-mode: normal;
+  outline: none;
+}
+.kis-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #3DDC84;
+  border: 2px solid #0A0F0A;
+  box-shadow: 0 0 10px rgba(46,204,113,0.7);
+  cursor: pointer;
+}
+.kis-range::-moz-range-thumb {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #3DDC84;
+  border: 2px solid #0A0F0A;
+  box-shadow: 0 0 10px rgba(46,204,113,0.7);
+  cursor: pointer;
+}
+
+select.tap { padding-top: 0.6rem; padding-bottom: 0.6rem; }
