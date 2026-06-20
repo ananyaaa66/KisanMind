@@ -1,11 +1,12 @@
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { CloudRain, ScanLine, TrendingUp, FileBadge, CloudSun, FileText, ChevronRight, User, Settings, FileCheck, Activity } from 'lucide-react'
+import { CloudRain, ScanLine, TrendingUp, FileBadge, CloudSun, FileText, ChevronRight, User, Settings, FileCheck, Loader2 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import GrowthLine from '../components/GrowthLine.jsx'
 import SpeakButton from '../components/SpeakButton.jsx'
-import { farmer, weatherSnapshot, todayAdvisory, cropHealthScore } from '../data/mockData.js'
+import { fetchWeather } from '../utils/api.js'
 
 const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })
 
@@ -20,20 +21,41 @@ export default function Home() {
   const { lang, setReportOpen, advisoryData, setAdvisoryData, reportsHistory } = useApp()
   const navigate = useNavigate()
 
+  // Live weather state
+  const [liveWeather, setLiveWeather] = useState(null)
+  const [weatherLoading, setWeatherLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadWeather() {
+      try {
+        const data = await fetchWeather('Delhi')
+        if (!cancelled) setLiveWeather(data)
+      } catch { /* silently fail — show fallback */ }
+      finally { if (!cancelled) setWeatherLoading(false) }
+    }
+    loadWeather()
+    return () => { cancelled = true }
+  }, [])
+
+  // Farmer name from localStorage or default
+  const farmerName = localStorage.getItem('kisanmind_farmer_name') || (lang === 'hi' ? 'किसान' : 'Farmer')
+  const farmerLocation = localStorage.getItem('kisanmind_farmer_location') || (lang === 'hi' ? 'दिल्ली' : 'Delhi')
+
   const userMenuItems = [
     { to: '/profile', icon: User, label: { en: 'My Profile', hi: 'मेरा प्रोफाइल' } },
     { to: '/reports', icon: FileCheck, label: { en: 'Reports', hi: 'रिपोर्ट' } },
     { to: '/settings', icon: Settings, label: { en: 'Settings', hi: 'सेटिंग्स' } },
   ]
 
-  // Resolve dynamic weather
-  const currentTemp = advisoryData?.weather_result?.today
-    ? Math.round(advisoryData.weather_result.today.temp_max_c)
-    : weatherSnapshot.temp
+  // Resolve dynamic weather from live API
+  const currentTemp = liveWeather?.today
+    ? Math.round(liveWeather.today.temp_max_c)
+    : null
 
-  const currentRain = advisoryData?.weather_result?.today
-    ? advisoryData.weather_result.today.rain_probability_percent
-    : weatherSnapshot.rainChance
+  const currentRain = liveWeather?.today
+    ? liveWeather.today.rain_probability_percent
+    : null
 
   // Resolve dynamic advisory
   const activeAdvisory = advisoryData?.final_report
@@ -47,7 +69,13 @@ export default function Home() {
           hi: advisoryData.final_report.slice(0, 180) + '...'
         }
       }
-    : todayAdvisory
+    : {
+        title: { en: 'Run Disease Scan to get AI advisory', hi: 'एआई सलाह पाने के लिए रोग जाँच करें' },
+        body: {
+          en: 'Tap "Disease Scan" to analyze your crop with our 5-agent AI system — disease detection, market prices, weather, and government schemes.',
+          hi: '"रोग जाँच" पर टैप करें — हमारे 5-एजेंट एआई सिस्टम से रोग पहचान, बाज़ार भाव, मौसम और सरकारी योजनाएँ जानें।'
+        }
+      }
 
   const handleViewHistoryReport = (r) => {
     setAdvisoryData({
@@ -59,25 +87,19 @@ export default function Home() {
     setReportOpen(true)
   }
 
-  // Display only top 3 reports on home page
-  const displayReports = reportsHistory.length > 0
-    ? reportsHistory.slice(0, 3)
-    : [
-        { id: 'r1', title: { en: 'Tomato leaf diagnosis', hi: 'टमाटर पत्ती निदान' }, date: '12 Jun 2024', reportText: '', crop: 'tomato' },
-        { id: 'r2', title: { en: 'Onion mandi price plan', hi: 'प्याज़ मंडी भाव योजना' }, date: '09 Jun 2024', reportText: '', crop: 'onion' },
-        { id: 'r3', title: { en: 'PM-KISAN eligibility', hi: 'पीएम-किसान पात्रता' }, date: '04 Jun 2024', reportText: '', crop: 'wheat' }
-      ]
+  // Display only real reports
+  const displayReports = reportsHistory.slice(0, 3)
 
   return (
     <div className="px-4 pt-4 pb-32 space-y-4 animate-sprout">
-      {/* Greeting card with user menu */}
+      {/* Greeting card */}
       <div className="glass p-4 relative overflow-hidden">
         <span className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-crop to-lime" />
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
             <p className="text-[var(--text-dim)] text-sm">{t('greeting', lang)} 🙏</p>
-            <h2 className="text-2xl font-bold mt-0.5">{farmer.name[lang]}</h2>
-            <p className="text-sm text-[var(--text-dim)] mt-1">{farmer.location[lang]} · {today}</p>
+            <h2 className="text-2xl font-bold mt-0.5">{farmerName}</h2>
+            <p className="text-sm text-[var(--text-dim)] mt-1">{farmerLocation} · {today}</p>
           </div>
           <div className="flex gap-1">
             {userMenuItems.map(({ to, icon: Icon, label }) => (
@@ -95,31 +117,8 @@ export default function Home() {
         <GrowthLine className="mt-3 opacity-70" />
       </div>
 
-      {/* Crop health + Weather strip */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Crop health card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="glass p-3"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Activity size={18} className="text-lime" />
-            <span className="text-xs text-[var(--text-dim)]">{t('cropHealth', lang)}</span>
-          </div>
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="num text-2xl font-bold">{cropHealthScore.overall}%</p>
-              <p className="text-xs text-[var(--text-dim)] mt-0.5">{cropHealthScore.foliage === 'good' ? '✓ Good' : '⚠ Fair'}</p>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-lime/20 flex items-center justify-center text-sm">
-              🌱
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Weather snapshot strip */}
+      {/* Weather strip — LIVE */}
+      <div className="grid grid-cols-1 gap-3">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -129,10 +128,24 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <CloudRain className="text-lime" size={20} />
             <div>
-              <p className="num text-lg font-bold">{currentTemp}°C</p>
-              <p className="text-xs text-[var(--text-dim)]">{currentRain}% {lang === 'hi' ? 'वर्षा की संभावना' : 'Rain chance'}</p>
+              {weatherLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-lime" />
+                  <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम लोड हो रहा...' : 'Loading weather...'}</p>
+                </div>
+              ) : currentTemp !== null ? (
+                <>
+                  <p className="num text-lg font-bold">{currentTemp}°C</p>
+                  <p className="text-xs text-[var(--text-dim)]">{currentRain}% {lang === 'hi' ? 'वर्षा' : 'Rain'} · {liveWeather?.today?.description}</p>
+                </>
+              ) : (
+                <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम उपलब्ध नहीं' : 'Weather unavailable'}</p>
+              )}
             </div>
           </div>
+          {liveWeather && (
+            <span className="text-[10px] text-lime font-bold bg-lime/10 px-2 py-0.5 rounded-full border border-lime/30">LIVE</span>
+          )}
         </motion.div>
       </div>
 
@@ -164,27 +177,33 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Recent reports */}
+      {/* Recent reports — live only */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm font-semibold">{t('recentReports', lang)}</p>
         </div>
-        <div className="space-y-2">
-          {displayReports.map((r) => (
-            <button 
-              key={r.id} 
-              onClick={() => r.reportText ? handleViewHistoryReport(r) : setReportOpen(true)}
-              className="glass w-full p-3 flex items-center gap-3 text-left"
-            >
-              <FileText size={18} className="text-cropbright shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{r.title[lang]}</p>
-                <p className="text-xs text-[var(--text-dim)]">{r.date}</p>
-              </div>
-              <ChevronRight size={18} className="text-[var(--text-dim)]" />
-            </button>
-          ))}
-        </div>
+        {displayReports.length > 0 ? (
+          <div className="space-y-2">
+            {displayReports.map((r) => (
+              <button 
+                key={r.id} 
+                onClick={() => handleViewHistoryReport(r)}
+                className="glass w-full p-3 flex items-center gap-3 text-left"
+              >
+                <FileText size={18} className="text-cropbright shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{r.title[lang]}</p>
+                  <p className="text-xs text-[var(--text-dim)]">{r.date}</p>
+                </div>
+                <ChevronRight size={18} className="text-[var(--text-dim)]" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="glass p-4 text-center text-xs text-[var(--text-dim)]">
+            {lang === 'hi' ? 'अभी तक कोई रिपोर्ट नहीं। "रोग जाँच" से शुरू करें।' : 'No reports yet. Start with a Disease Scan to generate your first advisory.'}
+          </div>
+        )}
       </div>
     </div>
   )

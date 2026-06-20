@@ -2,12 +2,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
  * Execute the multi-agent agricultural advisory pipeline.
- * 
- * @param {string} cropType - Type of crop (e.g. tomato, onion)
- * @param {string} location - Farmer's location (e.g. Nashik, Maharashtra)
- * @param {string} query - Farmer's custom question or prompt
- * @param {File|null} imageFile - Optional photo of the infected crop
- * @returns {Promise<object>} Parsed response JSON from FastAPI
  */
 export async function runAdvisory(cropType, location, query, imageFile = null) {
   const formData = new FormData();
@@ -34,9 +28,6 @@ export async function runAdvisory(cropType, location, query, imageFile = null) {
 
 /**
  * Fetch past advisory reports for a session ID.
- * 
- * @param {string} sessionId - User session identifier
- * @returns {Promise<object>} History reports object
  */
 export async function getHistory(sessionId) {
   const response = await fetch(`${API_BASE_URL}/history/${encodeURIComponent(sessionId)}`);
@@ -48,9 +39,6 @@ export async function getHistory(sessionId) {
 
 /**
  * Download a PDF copy of the advisory report.
- * 
- * @param {string} sessionId - The advisory session ID
- * @param {string} reportMarkdown - The full markdown content of the report
  */
 export async function downloadAdvisoryPdf(sessionId, reportMarkdown) {
   const formData = new FormData();
@@ -75,4 +63,54 @@ export async function downloadAdvisoryPdf(sessionId, reportMarkdown) {
   a.click();
   document.body.removeChild(a);
   window.URL.revokeObjectURL(url);
+}
+
+/**
+ * Fetch real-time weather from OpenWeatherMap via backend.
+ * @param {string} location - City name (e.g. "Delhi")
+ * @returns {Promise<object>} { success, location, today, forecast_3d }
+ */
+export async function fetchWeather(location = 'Delhi') {
+  const response = await fetch(`${API_BASE_URL}/weather?location=${encodeURIComponent(location)}`);
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ detail: 'Weather fetch failed' }));
+    throw new Error(errData.detail || 'Failed to fetch weather');
+  }
+  return response.json();
+}
+
+/**
+ * Fetch eligible government schemes via Tavily + LLM.
+ * @param {string} crop - Crop type (e.g. "tomato")
+ * @param {string} location - State name (e.g. "Maharashtra")
+ * @returns {Promise<object>} { success, scheme_result }
+ */
+export async function fetchSchemes(crop = 'wheat', location = 'Maharashtra') {
+  const response = await fetch(
+    `${API_BASE_URL}/schemes?crop=${encodeURIComponent(crop)}&location=${encodeURIComponent(location)}`
+  );
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ detail: 'Scheme search failed' }));
+    throw new Error(errData.detail || 'Failed to fetch schemes');
+  }
+  return response.json();
+}
+
+/**
+ * Get XGBoost 7-day crop price prediction.
+ * @param {string} crop - Crop type
+ * @param {string} state - Indian state
+ * @param {number} month - Current month (1-12)
+ * @param {number} lastPrice - Last known price per quintal
+ * @returns {Promise<object>} { success, prediction }
+ */
+export async function fetchPrediction(crop = 'tomato', state = 'Maharashtra', month = 6, lastPrice = 2500) {
+  const response = await fetch(
+    `${API_BASE_URL}/predict?crop=${encodeURIComponent(crop)}&state=${encodeURIComponent(state)}&month=${month}&last_price=${lastPrice}`
+  );
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ detail: 'Prediction failed' }));
+    throw new Error(errData.detail || 'Failed to get prediction');
+  }
+  return response.json();
 }

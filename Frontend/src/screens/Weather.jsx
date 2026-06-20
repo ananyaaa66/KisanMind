@@ -1,10 +1,11 @@
-import { Sun, Cloud, CloudRain, SprayCan, Droplets, Scissors, Sprout, Sparkles } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Sun, Cloud, CloudRain, SprayCan, Droplets, Sprout, Sparkles, Loader2, WifiOff } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import Screen from '../components/Screen.jsx'
 import SpeakButton from '../components/SpeakButton.jsx'
-import { forecast as mockForecast, actionTimeline as mockTimeline, soilTip as mockSoilTip, extendedForecast as mockExtendedForecast } from '../data/mockData.js'
+import { fetchWeather } from '../utils/api.js'
 
 const wIcon = { 
   sun: Sun, 
@@ -16,73 +17,122 @@ const wIcon = {
   thunderstorm: CloudRain
 }
 
+function mapIconFromDesc(desc) {
+  const d = (desc || '').toLowerCase()
+  if (d.includes('rain') || d.includes('drizzle') || d.includes('shower')) return 'rain'
+  if (d.includes('clear') || d.includes('sun')) return 'sun'
+  return 'cloud'
+}
+
 export default function Weather() {
-  const { lang, advisoryData } = useApp()
+  const { lang } = useApp()
+  const [weatherData, setWeatherData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  // Check if we have live weather data
-  const hasLiveData = advisoryData && advisoryData.weather_result
-  const liveWeather = hasLiveData ? advisoryData.weather_result : null
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await fetchWeather('Delhi')
+        if (!cancelled) setWeatherData(data)
+      } catch (err) {
+        if (!cancelled) setError(err.message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
 
-  // Map forecast data
-  const displayForecast = hasLiveData && liveWeather.forecast_3d && liveWeather.forecast_3d.length > 0
-    ? liveWeather.forecast_3d.map((f, i) => {
-        // Map icon dynamically based on backend description
-        const desc = (f.description || '').toLowerCase()
-        let iconName = 'cloud'
-        if (desc.includes('rain') || desc.includes('drizzle') || desc.includes('shower')) iconName = 'rain'
-        else if (desc.includes('clear') || desc.includes('sun')) iconName = 'sun'
-        
-        // Format day name from date string (e.g. "2024-06-12" -> "Wed")
-        const dateObj = new Date(f.date)
-        const dayStr = isNaN(dateObj.getTime()) 
-          ? f.date 
-          : dateObj.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short' })
+  if (loading) {
+    return (
+      <Screen title={t('weatherTitle', lang)} subtitle="Agent 4">
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 size={32} className="animate-spin text-lime" />
+          <p className="text-sm text-[var(--text-dim)]">
+            {lang === 'hi' ? 'लाइव मौसम डेटा लोड हो रहा है...' : 'Fetching live weather from OpenWeatherMap...'}
+          </p>
+        </div>
+      </Screen>
+    )
+  }
 
-        return {
-          day: dayStr,
-          temp: Math.round(f.temp_max_c),
-          minTemp: Math.round(f.temp_min_c),
-          rain: Math.round(f.rain_probability_percent),
-          icon: iconName,
-          desc: f.description
-        }
-      })
-    : mockExtendedForecast
+  if (error || !weatherData) {
+    return (
+      <Screen title={t('weatherTitle', lang)} subtitle="Agent 4">
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+          <WifiOff size={32} className="text-red-400" />
+          <p className="text-sm text-red-400 font-semibold">{lang === 'hi' ? 'मौसम डेटा लोड नहीं हो सका' : 'Failed to load weather data'}</p>
+          <p className="text-xs text-[var(--text-dim)] max-w-xs">{error}</p>
+        </div>
+      </Screen>
+    )
+  }
 
-  // Map action timeline from live advisories
-  const displayTimeline = hasLiveData
-    ? [
-        { 
-          type: 'spray', 
-          when: { en: 'Spray Advisory', hi: 'छिड़काव सलाह' }, 
-          text: { en: liveWeather.spray_advisory || 'Conditions good for foliar spray.', hi: liveWeather.spray_advisory || 'छिड़काव के लिए मौसम उपयुक्त है।' } 
-        },
-        { 
-          type: 'irrigate', 
-          when: { en: 'Irrigation Advice', hi: 'सिंचाई सलाह' }, 
-          text: { en: liveWeather.irrigation_recommendation || 'Irrigate based on soil moisture.', hi: liveWeather.irrigation_recommendation || 'मिट्टी की नमी के अनुसार हल्की सिंचाई करें।' } 
-        }
-      ]
-    : mockTimeline
+  const today = weatherData.today
+  const forecast3d = (weatherData.forecast_3d || []).map((f) => {
+    const dateObj = new Date(f.date)
+    const dayStr = isNaN(dateObj.getTime())
+      ? f.date
+      : dateObj.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short' })
+    return {
+      day: dayStr,
+      temp: Math.round(f.temp_max_c),
+      minTemp: Math.round(f.temp_min_c),
+      rain: Math.round(f.rain_probability_percent),
+      humidity: Math.round(f.humidity_percent),
+      wind: Math.round(f.wind_speed_kmh),
+      icon: mapIconFromDesc(f.description),
+      desc: f.description,
+    }
+  })
 
-  const soilTipText = hasLiveData && liveWeather.today
-    ? (lang === 'hi' 
-        ? `वर्तमान आर्द्रता ${liveWeather.today.humidity_percent}% है। नम मौसम में कवक के प्रति सावधान रहें।`
-        : `Current humidity is ${liveWeather.today.humidity_percent}%. Watch out for fungal infections in humid conditions.`)
-    : mockSoilTip[lang]
+  const soilTipText = lang === 'hi'
+    ? `वर्तमान आर्द्रता ${today.humidity_percent}% है। हवा की गति ${Math.round(today.wind_speed_kmh)} km/h। नम मौसम में कवक के प्रति सावधान रहें।`
+    : `Current humidity is ${today.humidity_percent}%. Wind speed ${Math.round(today.wind_speed_kmh)} km/h. Watch for fungal infections in humid conditions.`
 
   return (
     <Screen title={t('weatherTitle', lang)} subtitle="Agent 4">
-      {hasLiveData && (
-        <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center mb-3">
-          <Sparkles size={12} /> {lang === 'hi' ? 'लाइव मौसम डेटा (ओपनवेदरमैप)' : 'Live Weather Agent (OpenWeatherMap)'}
-        </div>
-      )}
+      {/* Live badge */}
+      <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center mb-3">
+        <Sparkles size={12} /> {lang === 'hi' ? 'लाइव मौसम — OpenWeatherMap' : `Live Weather — ${weatherData.location}`}
+      </div>
 
-      {/* 3-day / 7-day forecast detailed */}
-      <p className="text-sm font-semibold mb-3">{t('sevenDayForecast', lang)}</p>
+      {/* Today's highlight card */}
+      <div className="glass active p-5 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-[var(--text-dim)] uppercase tracking-wider">{lang === 'hi' ? 'आज का मौसम' : "Today's Weather"}</p>
+            <p className="num text-4xl font-extrabold text-cropbright mt-1" style={{ textShadow: '0 0 24px rgba(46,204,113,0.5)' }}>
+              {Math.round(today.temp_max_c)}°C
+            </p>
+            <p className="text-sm text-[var(--text-dim)] mt-1 capitalize">{today.description}</p>
+          </div>
+          <div className="text-right space-y-2">
+            <div>
+              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'आर्द्रता' : 'Humidity'}</p>
+              <p className="text-sm font-bold text-lime">{today.humidity_percent}%</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'हवा' : 'Wind'}</p>
+              <p className="text-sm font-bold">{Math.round(today.wind_speed_kmh)} km/h</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'वर्षा' : 'Rain'}</p>
+              <p className="text-sm font-bold text-lime">{today.rain_probability_percent}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3-day forecast */}
+      <p className="text-sm font-semibold mb-3">{lang === 'hi' ? '3-दिन का पूर्वानुमान' : '3-Day Forecast'}</p>
       <div className="space-y-2 mb-4">
-        {displayForecast.map((f, i) => {
+        {forecast3d.map((f, i) => {
           const Icon = wIcon[f.icon] || Cloud
           return (
             <motion.div
@@ -98,7 +148,7 @@ export default function Weather() {
                 </div>
                 <Icon size={20} className={f.icon === 'rain' ? 'text-lime' : 'text-cropbright'} />
                 {f.desc && (
-                  <span className="text-[10px] text-[var(--text-dim)] truncate max-w-[80px]">
+                  <span className="text-[10px] text-[var(--text-dim)] truncate max-w-[80px] capitalize">
                     {f.desc}
                   </span>
                 )}
@@ -118,29 +168,7 @@ export default function Weather() {
         })}
       </div>
 
-      {/* Action timeline — nodes connected by an animated vine/stem */}
-      <p className="text-sm font-semibold mt-5 mb-3">{t('actionTimeline', lang)}</p>
-      <div className="relative pl-9">
-        <span className="absolute left-[14px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-crop via-lime to-crop/20" />
-        <div className="space-y-4">
-          {displayTimeline.map((a, i) => {
-            const Icon = a.type === 'spray' ? SprayCan : a.type === 'irrigate' ? Droplets : Scissors
-            return (
-              <div key={i} className="relative">
-                <span className="absolute -left-9 top-0 grid place-items-center w-7 h-7 rounded-full bg-panel border border-crop/50 text-cropbright glow-green">
-                  <Icon size={15} />
-                </span>
-                <div className="glass p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-lime font-semibold">{a.when[lang] || a.when}</p>
-                  <p className="text-sm mt-0.5">{a.text[lang] || a.text}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Soil tip */}
+      {/* Soil tip based on live data */}
       <div className="glass active p-4 mt-5">
         <div className="flex items-center justify-between mb-1">
           <p className="flex items-center gap-2 font-semibold"><Sprout size={18} className="text-cropbright" /> {t('soilTip', lang)}</p>

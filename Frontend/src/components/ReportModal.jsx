@@ -3,7 +3,7 @@ import { X, FileDown, Volume2, Share2, Sparkles } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import GrowthLine from './GrowthLine.jsx'
-import { farmer } from '../data/mockData.js'
+
 
 export default function ReportModal() {
   const { reportOpen, setReportOpen, lang, speak, advisoryData, exportPdf } = useApp()
@@ -71,7 +71,7 @@ export default function ReportModal() {
             {/* Content Body */}
             <div className="overflow-y-auto scrollbar-hide px-4 pb-6 flex-1">
               <p className="text-xs text-[var(--text-dim)] mb-3">
-                {farmer.name[lang]} · {farmer.location[lang]} · {advisoryData?.timestamp ? new Date(advisoryData.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today'}
+                {localStorage.getItem('kisanmind_farmer_name') || 'Farmer'} · {advisoryData?.location || localStorage.getItem('kisanmind_farmer_location') || 'Delhi'} · {advisoryData?.timestamp ? new Date(advisoryData.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today'}
               </p>
               <GrowthLine className="mb-4 opacity-70" />
               

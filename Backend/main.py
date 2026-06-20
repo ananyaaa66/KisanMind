@@ -25,7 +25,7 @@ from graph.pipeline import run_pipeline
 from memory.long_term import get_history, save_report, search_similar
 from models.state import create_initial_state
 from utils.image_handler import upload_to_base64, validate_image_size
-from utils.llm_provider import get_provider_info
+from utils.llm_provider import get_llm, get_provider_info
 from utils.pdf_generator import generate_pdf
 
 # ──────────────────────────────────────────────
@@ -210,6 +210,155 @@ async def health_check():
 
 
 # ──────────────────────────────────────────────
+# GET /weather — Standalone live weather
+# ──────────────────────────────────────────────
+
+@app.get("/weather")
+async def get_weather(location: str = "Delhi"):
+    """
+    Fetch real-time weather from OpenWeatherMap for a location.
+    Returns current conditions + 3-day forecast.
+    No LLM call — fast response (<2s).
+    """
+    from agents.weather_agent import _fetch_weather, _parse_current, _parse_forecast_3d
+
+    try:
+        weather_data = await _fetch_weather(location)
+
+        # Check for API error
+        if weather_data["current"].get("cod") != 200:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Weather data not found for '{location}': {weather_data['current'].get('message', 'Unknown error')}"
+            )
+
+        today = _parse_current(weather_data["current"])
+        forecast_3d = _parse_forecast_3d(weather_data["forecast"])
+
+        return {
+            "success": True,
+            "location": location,
+            "today": today.model_dump(),
+            "forecast_3d": [f.model_dump() for f in forecast_3d],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Weather fetch failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
+# GET /schemes — Standalone scheme search
+# ──────────────────────────────────────────────
+
+@app.get("/schemes")
+async def get_schemes(crop: str = "wheat", location: str = "Maharashtra"):
+    """
+    Search for eligible government agricultural schemes
+    using Tavily + LLM synthesis.
+    """
+    from agents.scheme_agent import _search_schemes
+    from models.state import SchemeInfo, SchemeResult
+    import json
+
+    try:
+        search_results = await _search_schemes(crop, location, "")
+
+        llm = get_llm()
+
+        prompt = f"""You are an expert on Indian government agricultural schemes and subsidies.
+A farmer growing {crop} in {location} is looking for eligible schemes.
+
+Based on the search results below, identify ALL eligible government schemes.
+
+Search Results:
+{search_results}
+
+Return a JSON with exactly this structure:
+{{
+  "eligible_schemes": [
+    {{
+      "scheme_name": "name of the scheme",
+      "description": "brief 1-2 line description",
+      "eligibility": "who is eligible",
+      "application_steps": "step by step how to apply",
+      "deadline": "deadline if known, else null",
+      "link": "official URL if available, else null"
+    }}
+  ],
+  "total_found": <number>,
+  "state_specific": true/false
+}}
+
+Rules:
+- Always include PM-KISAN and PM Fasal Bima Yojana if relevant
+- Include state-specific schemes for {location}
+- Return ONLY the JSON, no markdown fences
+"""
+        response = await llm.ainvoke(prompt)
+        raw = response.content.strip()
+
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+
+        parsed = json.loads(raw)
+        result = SchemeResult(
+            eligible_schemes=[SchemeInfo(**s) for s in parsed.get("eligible_schemes", [])],
+            total_found=parsed.get("total_found", 0),
+            state_specific=parsed.get("state_specific", False),
+        )
+
+        return {
+            "success": True,
+            "crop": crop,
+            "location": location,
+            "scheme_result": result.model_dump(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scheme search failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
+# GET /predict — Standalone ML price prediction
+# ──────────────────────────────────────────────
+
+@app.get("/predict")
+async def get_prediction(
+    crop: str = "tomato",
+    state: str = "Maharashtra",
+    month: int = 6,
+    last_price: float = 2500.0,
+):
+    """
+    Get XGBoost 7-day crop price prediction.
+    Uses the trained price_model.pkl directly.
+    """
+    from models.price_predictor import predict
+
+    try:
+        result = predict(crop=crop, state=state, month=month, last_price=last_price)
+
+        if result.get("error"):
+            raise HTTPException(status_code=500, detail=f"Prediction error: {result['error']}")
+
+        return {
+            "success": True,
+            "crop": crop,
+            "state": state,
+            "month": month,
+            "last_price": last_price,
+            "prediction": result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
 # Run with: uvicorn main:app --reload --port 8000
 # ──────────────────────────────────────────────
 
@@ -217,3 +366,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
