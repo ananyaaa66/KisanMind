@@ -1,32 +1,21 @@
 import { useState, useEffect } from 'react'
-import { MapPin, TrendingUp, TrendingDown, Sparkles, Loader2, WifiOff } from 'lucide-react'
+import { MapPin, TrendingUp, TrendingDown, Sparkles, Loader2, WifiOff, ChevronDown } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import Screen from '../components/Screen.jsx'
 import { fetchPrediction } from '../utils/api.js'
-
-const crops = [
-  { id: 'tomato', label: { en: 'Tomato', hi: 'टमाटर' }, icon: '🍅' },
-  { id: 'onion', label: { en: 'Onion', hi: 'प्याज़' }, icon: '🧅' },
-  { id: 'wheat', label: { en: 'Wheat', hi: 'गेहूँ' }, icon: '🌾' },
-  { id: 'cotton', label: { en: 'Cotton', hi: 'कपास' }, icon: '☁️' },
-  { id: 'soybean', label: { en: 'Soybean', hi: 'सोयाबीन' }, icon: '🫘' },
-]
-
-// Approximate last known prices for initial prediction
-const lastKnownPrices = {
-  tomato: 2500, onion: 1800, wheat: 2300, cotton: 7000, soybean: 4600,
-}
+import { crops, indianStates, datasetStates, getDistrictsForState, lastKnownPrices } from '../data/mockData.js'
 
 export default function MandiPrices() {
   const { lang, advisoryData } = useApp()
-  const [crop, setCrop] = useState('tomato')
+  const [crop, setCrop] = useState('wheat')
+  const [selectedState, setSelectedState] = useState('Uttar Pradesh')
   const [prediction, setPrediction] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // Fetch ML prediction when crop changes
+  // Fetch ML prediction when crop or state changes
   useEffect(() => {
     let cancelled = false
     async function loadPrediction() {
@@ -35,7 +24,7 @@ export default function MandiPrices() {
       try {
         const month = new Date().getMonth() + 1
         const lastPrice = lastKnownPrices[crop] || 2500
-        const data = await fetchPrediction(crop, 'Maharashtra', month, lastPrice)
+        const data = await fetchPrediction(crop, selectedState, month, lastPrice)
         if (!cancelled) setPrediction(data.prediction)
       } catch (err) {
         if (!cancelled) setError(err.message)
@@ -45,7 +34,7 @@ export default function MandiPrices() {
     }
     loadPrediction()
     return () => { cancelled = true }
-  }, [crop])
+  }, [crop, selectedState])
 
   // Check for live advisory pipeline data
   const hasLiveData = advisoryData && advisoryData.crop_type === crop && advisoryData.market_result
@@ -53,7 +42,7 @@ export default function MandiPrices() {
 
   const currentPrice = liveMarket
     ? liveMarket.current_price_per_quintal
-    : lastKnownPrices[crop]
+    : lastKnownPrices[crop] || 2500
 
   const predictedPrice = prediction?.predicted_price || null
   const confidence = prediction?.confidence || null
@@ -76,9 +65,40 @@ export default function MandiPrices() {
         : `XGBoost Model: ₹${Math.round(predictedPrice)} predicted in 7 days. ${Number(trendPercent) > 0 ? 'Upward' : 'Downward'} trend.`)
       : ''
 
+  const hasDataset = datasetStates.includes(selectedState)
+  const cropInfo = crops.find((c) => c.id === crop)
+
   return (
     <Screen title={t('pricesTitle', lang)} subtitle="Agent 2">
-      {/* Crop selector pills */}
+      {/* State selector */}
+      <div className="glass p-3 mb-3">
+        <label className="text-xs text-[var(--text-dim)] mb-1 block">{lang === 'hi' ? 'राज्य चुनें' : 'Select State'}</label>
+        <div className="relative">
+          <select
+            value={selectedState}
+            onChange={(e) => setSelectedState(e.target.value)}
+            className="tap w-full bg-panel border border-crop/20 rounded-xl px-3 py-2 text-sm focus:border-crop outline-none appearance-none pr-8"
+          >
+            {/* Dataset states first */}
+            <optgroup label={lang === 'hi' ? '📊 डेटा उपलब्ध' : '📊 Data Available'}>
+              {datasetStates.map((s) => <option key={s} className="bg-panel">{s}</option>)}
+            </optgroup>
+            <optgroup label={lang === 'hi' ? '🌤️ केवल मौसम' : '🌤️ Weather Only'}>
+              {indianStates.filter((s) => !datasetStates.includes(s)).map((s) => (
+                <option key={s} className="bg-panel">{s}</option>
+              ))}
+            </optgroup>
+          </select>
+          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)] pointer-events-none" />
+        </div>
+        {!hasDataset && (
+          <p className="text-[10px] text-yellow-400 mt-1">
+            {lang === 'hi' ? '⚠️ इस राज्य के लिए डेटासेट में भाव उपलब्ध नहीं है' : '⚠️ No price data in dataset for this state'}
+          </p>
+        )}
+      </div>
+
+      {/* Crop selector pills — horizontal scroll */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
         {crops.map((c) => (
           <button key={c.id} onClick={() => setCrop(c.id)}
@@ -96,7 +116,7 @@ export default function MandiPrices() {
             <Sparkles size={10} /> {lang === 'hi' ? 'लाइव डेटा' : 'Live AI Agent'}
           </div>
         )}
-        <p className="text-sm text-[var(--text-dim)]">{crops.find((c) => c.id === crop).label[lang]} · {t('perQuintal', lang)}</p>
+        <p className="text-sm text-[var(--text-dim)]">{cropInfo?.label[lang] || crop} · {t('perQuintal', lang)}</p>
         <p className="num text-5xl font-extrabold text-cropbright mt-1" style={{ textShadow: '0 0 24px rgba(46,204,113,0.5)' }}>
           ₹{currentPrice.toLocaleString('en-IN')}
         </p>

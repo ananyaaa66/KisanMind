@@ -17,8 +17,17 @@ from models.state import DiseaseResult, KisanMindState
 load_dotenv()
 
 # Configure Gemini Vision — always uses Gemini regardless of LLM_PROVIDER
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
-client = genai.Client(api_key=GEMINI_API_KEY)
+_client = None
+
+def get_genai_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY or LLM_API_KEY environment variable is missing.")
+        _client = genai.Client(api_key=api_key)
+    return _client
+
 
 DISEASE_PROMPT = """You are an expert agricultural plant pathologist AI for Indian farming.
 Analyze the provided crop image carefully and return a JSON object with exactly these fields:
@@ -65,7 +74,7 @@ async def run_disease_agent(state: KisanMindState) -> KisanMindState:
             mime_type="image/jpeg",
         )
 
-        response = client.models.generate_content(
+        response = get_genai_client().models.generate_content(
             model=os.getenv("LLM_MODEL_NAME", "gemini-2.0-flash"),
             contents=[DISEASE_PROMPT, image_part],
             config=genai.types.GenerateContentConfig(

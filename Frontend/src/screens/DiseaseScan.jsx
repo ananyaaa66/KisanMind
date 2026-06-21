@@ -7,14 +7,7 @@ import Screen from '../components/Screen.jsx'
 import LeafSpinner from '../components/LeafSpinner.jsx'
 import RadialGauge from '../components/RadialGauge.jsx'
 import SpeakButton from '../components/SpeakButton.jsx'
-
-const cropsList = [
-  { id: 'tomato', label: { en: 'Tomato', hi: 'टमाटर' }, icon: '🍅' },
-  { id: 'onion', label: { en: 'Onion', hi: 'प्याज़' }, icon: '🧅' },
-  { id: 'wheat', label: { en: 'Wheat', hi: 'गेहूँ' }, icon: '🌾' },
-  { id: 'cotton', label: { en: 'Cotton', hi: 'कपास' }, icon: '☁️' },
-  { id: 'soybean', label: { en: 'Soybean', hi: 'सोयाबीन' }, icon: '🫘' },
-]
+import { crops as cropsList } from '../data/mockData.js'
 
 const sevColor = {
   low: 'text-cropbright border-crop/40 bg-crop/10',
@@ -31,7 +24,7 @@ export default function DiseaseScan() {
   const { lang, runAdvisoryPipeline, loading, advisoryData, setReportOpen } = useApp()
   
   // Form states
-  const [cropType, setCropType] = useState('tomato')
+  const [cropType, setCropType] = useState('wheat')
   const [location, setLocation] = useState('Nashik, Maharashtra')
   const [query, setQuery] = useState('')
   const [selectedFile, setSelectedFile] = useState(null)
@@ -135,20 +128,19 @@ export default function DiseaseScan() {
               <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1">
                 {lang === 'hi' ? 'फसल चुनें' : 'Select Crop'}
               </label>
-              <div className="grid grid-cols-5 gap-1.5">
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
                 {cropsList.map((c) => (
                   <button
                     type="button"
                     key={c.id}
                     onClick={() => setCropType(c.id)}
-                    className={`p-2 rounded-xl text-center border transition flex flex-col items-center gap-1 ${
+                    className={`shrink-0 px-3 py-2 rounded-full border transition flex items-center gap-1.5 text-sm font-semibold ${
                       cropType === c.id 
                         ? 'bg-crop text-ink border-crop glow-green' 
-                        : 'glass border-white/5 text-[var(--text-dim)] text-xs'
+                        : 'glass border-white/5 text-[var(--text-dim)]'
                     }`}
                   >
-                    <span className="text-lg">{c.icon}</span>
-                    <span className="text-[10px] font-semibold truncate w-full">{c.label[lang]}</span>
+                    <span>{c.icon}</span> {c.label[lang]}
                   </button>
                 ))}
               </div>

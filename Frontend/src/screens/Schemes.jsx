@@ -5,20 +5,12 @@ import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import Screen from '../components/Screen.jsx'
 import { fetchSchemes } from '../utils/api.js'
-
-const indianStates = ['Maharashtra', 'Punjab', 'Uttar Pradesh', 'Karnataka', 'Gujarat', 'Madhya Pradesh', 'Rajasthan', 'Bihar']
-const crops = [
-  { id: 'tomato', label: { en: 'Tomato', hi: 'टमाटर' }, icon: '🍅' },
-  { id: 'onion', label: { en: 'Onion', hi: 'प्याज़' }, icon: '🧅' },
-  { id: 'wheat', label: { en: 'Wheat', hi: 'गेहूँ' }, icon: '🌾' },
-  { id: 'cotton', label: { en: 'Cotton', hi: 'कपास' }, icon: '☁️' },
-  { id: 'soybean', label: { en: 'Soybean', hi: 'सोयाबीन' }, icon: '🫘' },
-]
+import { crops, indianStates } from '../data/mockData.js'
 
 export default function Schemes() {
   const { lang } = useApp()
   const [state, setState] = useState('Maharashtra')
-  const [crop, setCrop] = useState('tomato')
+  const [crop, setCrop] = useState('wheat')
   const [open, setOpen] = useState(null)
 
   const [schemesData, setSchemesData] = useState(null)
@@ -68,10 +60,13 @@ export default function Schemes() {
       <div className="glass p-4 space-y-4">
         <div>
           <label className="text-xs text-[var(--text-dim)]">{t('state', lang)}</label>
-          <select value={state} onChange={(e) => setState(e.target.value)}
-            className="tap w-full mt-1 bg-panel border border-crop/20 rounded-xl px-3 text-sm focus:border-crop outline-none">
-            {indianStates.map((s) => <option key={s} className="bg-panel">{s}</option>)}
-          </select>
+          <div className="relative">
+            <select value={state} onChange={(e) => setState(e.target.value)}
+              className="tap w-full mt-1 bg-panel border border-crop/20 rounded-xl px-3 text-sm focus:border-crop outline-none appearance-none pr-8">
+              {indianStates.map((s) => <option key={s} className="bg-panel">{s}</option>)}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)] pointer-events-none" />
+          </div>
         </div>
 
         <div>
