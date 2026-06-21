@@ -7,9 +7,8 @@ Trains and serves an XGBoost regression model for
 Features: crop_type (encoded), state (encoded), month, season, last_30d_avg_price
 Target:   predicted price for next 7 days
 
-The model is trained on synthetic data for now and saved as
-price_model.pkl. It can be retrained on real Kaggle/government
-data later by calling train_model().
+The model is trained on the real agmarknet dataset when available,
+falling back to synthetic data. Saved as price_model.pkl.
 """
 
 import os
@@ -25,28 +24,72 @@ warnings.filterwarnings("ignore")
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 MODEL_PATH = os.path.join(MODEL_DIR, "price_model.pkl")
 ENCODERS_PATH = os.path.join(MODEL_DIR, "price_encoders.pkl")
+DATASET_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "Dataset",
+                            "agmarknet_india_historical_prices_2024_2025.csv")
 
-# ── Synthetic data parameters ──
+# ── Crop & state lists matching the agmarknet dataset ──
 CROPS = [
-    "wheat", "rice", "cotton", "sugarcane", "soybean",
+    "wheat", "rice", "cotton", "sugarcane", "soyabean",
     "maize", "bajra", "jowar", "mustard", "groundnut",
-    "onion", "potato", "tomato", "chilli", "turmeric",
+    "onion", "potato", "tomato", "green chilli", "turmeric",
+    "arhar", "green gram", "lentil", "garlic", "ginger",
+    "cauliflower", "cabbage", "carrot", "bhindi", "brinjal",
+    "banana", "mango", "apple", "gur",
 ]
 
 STATES = [
     "Maharashtra", "Punjab", "Haryana", "Uttar Pradesh",
     "Madhya Pradesh", "Rajasthan", "Gujarat", "Karnataka",
     "Tamil Nadu", "Andhra Pradesh", "West Bengal", "Bihar",
-    "Odisha", "Telangana", "Chhattisgarh",
+    "Odisha", "Telangana", "Chhattisgarh", "Kerala",
+    "Jharkhand", "Assam", "Himachal Pradesh", "Uttarakhand",
+    "Goa", "Manipur", "Meghalaya", "Mizoram", "Nagaland",
+    "Sikkim", "Tripura", "Arunachal Pradesh", "Delhi",
 ]
+
+# Dataset commodity name → our crop id
+DATASET_COMMODITY_MAP = {
+    "Wheat": "wheat",
+    "Maize": "maize",
+    "Bajra(Pearl Millet/Cumbu)": "bajra",
+    "Jowar(Sorghum)": "jowar",
+    "Cotton": "cotton",
+    "Soyabean": "soyabean",
+    "Mustard": "mustard",
+    "Groundnut": "groundnut",
+    "Arhar (Tur/Red Gram)(Whole)": "arhar",
+    "Green Gram (Moong)(Whole)": "green gram",
+    "Lentil (Masur)(Whole)": "lentil",
+    "Onion": "onion",
+    "Potato": "potato",
+    "Tomato": "tomato",
+    "Green Chilli": "green chilli",
+    "Garlic": "garlic",
+    "Ginger(Green)": "ginger",
+    "Cauliflower": "cauliflower",
+    "Cabbage": "cabbage",
+    "Carrot": "carrot",
+    "Bhindi(Ladies Finger)": "bhindi",
+    "Brinjal": "brinjal",
+    "Banana": "banana",
+    "Mango": "mango",
+    "Apple": "apple",
+    "Gur(Jaggery)": "gur",
+    "Turmeric": "turmeric",
+}
 
 # Approximate real mandi price ranges (₹ per quintal)
 PRICE_RANGES = {
     "wheat": (2000, 2800), "rice": (2500, 3500), "cotton": (6000, 8500),
-    "sugarcane": (300, 400), "soybean": (4000, 5500), "maize": (1800, 2600),
+    "sugarcane": (300, 400), "soyabean": (4000, 5500), "maize": (1800, 2600),
     "bajra": (2200, 3000), "jowar": (2600, 3400), "mustard": (4800, 6200),
     "groundnut": (5000, 7000), "onion": (800, 3500), "potato": (600, 2000),
-    "tomato": (500, 4000), "chilli": (8000, 15000), "turmeric": (7000, 12000),
+    "tomato": (500, 4000), "green chilli": (3000, 8000), "turmeric": (7000, 12000),
+    "arhar": (6000, 9000), "green gram": (6000, 8500), "lentil": (4000, 6500),
+    "garlic": (3000, 8000), "ginger": (3000, 7000), "cauliflower": (800, 2500),
+    "cabbage": (500, 1800), "carrot": (1000, 3000), "bhindi": (1500, 4000),
+    "brinjal": (800, 2500), "banana": (1500, 4000), "mango": (2000, 8000),
+    "apple": (5000, 12000), "gur": (3500, 6000),
 }
 
 
@@ -64,6 +107,76 @@ def _get_season(month: int) -> int:
         return 4
 
 
+def _load_real_dataset() -> pd.DataFrame | None:
+    """
+    Load the agmarknet CSV and transform it into training-ready format.
+    Returns None if the CSV doesn't exist or can't be parsed.
+    """
+    if not os.path.exists(DATASET_PATH):
+        print(f"⚠️  Dataset not found at {DATASET_PATH}, falling back to synthetic data.")
+        return None
+
+    try:
+        print(f"📊 Loading real dataset from {DATASET_PATH}...")
+        df = pd.read_csv(DATASET_PATH)
+
+        # Map commodity names to our crop ids
+        df["crop"] = df["Commodity"].map(DATASET_COMMODITY_MAP)
+        df = df.dropna(subset=["crop"])
+
+        # Parse dates
+        df["date"] = pd.to_datetime(df["Price Date"], format="%d %b %Y", errors="coerce")
+        df = df.dropna(subset=["date"])
+
+        # Use modal price as the main price signal
+        df["price"] = pd.to_numeric(df["Modal Price (Rs./Quintal)"], errors="coerce")
+        df = df.dropna(subset=["price"])
+        df = df[df["price"] > 0]
+
+        # Extract features
+        df["state"] = df["State"]
+        df["month"] = df["date"].dt.month
+        df["season"] = df["month"].apply(_get_season)
+
+        # Build training records: for each crop+state+date, compute
+        # the 30-day rolling average and the 7-day forward price
+        records = []
+        for (crop, state), group in df.groupby(["crop", "state"]):
+            group = group.sort_values("date")
+            prices = group[["date", "price"]].drop_duplicates("date")
+            prices = prices.set_index("date").resample("D").mean().interpolate()
+
+            if len(prices) < 10:
+                continue
+
+            # Rolling 30-day average
+            prices["avg_30d"] = prices["price"].rolling(window=30, min_periods=5).mean()
+            # 7-day forward price
+            prices["target_7d"] = prices["price"].shift(-7)
+
+            valid = prices.dropna(subset=["avg_30d", "target_7d"])
+            for idx, row in valid.iterrows():
+                records.append({
+                    "crop": crop,
+                    "state": state,
+                    "month": idx.month,
+                    "season": _get_season(idx.month),
+                    "last_30d_avg_price": round(row["avg_30d"], 2),
+                    "target_price_7d": round(row["target_7d"], 2),
+                })
+
+        if len(records) < 100:
+            print(f"⚠️  Only {len(records)} records from real data, falling back to synthetic.")
+            return None
+
+        print(f"✅ Loaded {len(records)} training records from real dataset.")
+        return pd.DataFrame(records)
+
+    except Exception as e:
+        print(f"⚠️  Error loading dataset: {e}. Falling back to synthetic data.")
+        return None
+
+
 def _generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
     """
     Generate realistic synthetic mandi price data.
@@ -74,7 +187,7 @@ def _generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
     records = []
     for _ in range(n_samples):
         crop = np.random.choice(CROPS)
-        state = np.random.choice(STATES)
+        state = np.random.choice(STATES[:15])  # Use primary states
         month = np.random.randint(1, 13)
         season = _get_season(month)
 
@@ -110,7 +223,7 @@ def _generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
 def train_model(data: pd.DataFrame = None) -> dict:
     """
     Train XGBoost regression model and save to disk.
-    Can be called with real data or defaults to synthetic.
+    Tries real dataset first, falls back to synthetic.
     Returns training metrics.
     """
     import xgboost as xgb
@@ -118,7 +231,10 @@ def train_model(data: pd.DataFrame = None) -> dict:
     from sklearn.metrics import mean_absolute_error, r2_score
 
     if data is None:
-        data = _generate_synthetic_data()
+        # Try real dataset first
+        data = _load_real_dataset()
+        if data is None:
+            data = _generate_synthetic_data()
 
     # Encode categoricals
     crop_enc = LabelEncoder()
@@ -187,9 +303,12 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     crop_enc = encoders["crop"]
     state_enc = encoders["state"]
 
+    # Normalize crop name: handle frontend IDs like 'green_gram' -> 'green gram'
+    crop_normalized = crop.lower().replace("_", " ")
+
     # Handle unseen categories gracefully
     try:
-        crop_code = crop_enc.transform([crop.lower()])[0]
+        crop_code = crop_enc.transform([crop_normalized])[0]
     except ValueError:
         crop_code = 0  # fallback to first crop
 
@@ -204,7 +323,7 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     predicted = model.predict(X)[0]
 
     # Confidence based on how close last_price is to training range
-    low, high = PRICE_RANGES.get(crop.lower(), (1500, 3000))
+    low, high = PRICE_RANGES.get(crop_normalized, (1500, 3000))
     in_range = low <= last_price <= high
     confidence = 78.0 if in_range else 55.0  # heuristic confidence
 

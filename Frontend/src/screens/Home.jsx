@@ -29,7 +29,9 @@ export default function Home() {
     let cancelled = false
     async function loadWeather() {
       try {
-        const data = await fetchWeather('Delhi')
+        // Use farmer's saved location instead of hardcoded Delhi
+        const savedLoc = localStorage.getItem('kisanmind_farmer_location') || 'Delhi'
+        const data = await fetchWeather(savedLoc)
         if (!cancelled) setLiveWeather(data)
       } catch { /* silently fail — show fallback */ }
       finally { if (!cancelled) setWeatherLoading(false) }
