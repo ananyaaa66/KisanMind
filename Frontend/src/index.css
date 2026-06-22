@@ -11,6 +11,13 @@
   --card: rgba(20, 32, 22, 0.55);
   --card-border: rgba(46, 204, 113, 0.14);
   --text-dim: #8aa193;
+  --mic-right: max(1rem, calc(50% - 240px + 1rem));
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --mic-right: 2rem;
+  }
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -50,10 +57,16 @@ body {
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 .app-shell {
-  max-width: 480px;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100%;
   position: relative;
+  margin: 0 auto;
+}
+
+@media (max-width: 1023px) {
+  .app-shell {
+    max-width: 480px;
+  }
 }
 
 /* Green-track range sliders */

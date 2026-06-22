@@ -26,13 +26,21 @@ function mapIconFromDesc(desc) {
 }
 
 export default function Weather() {
-  const { lang } = useApp()
+  const { lang, profile, preferences } = useApp()
   const [weatherData, setWeatherData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const formatTemp = (celsius) => {
+    if (celsius === null || celsius === undefined) return '—'
+    if (preferences?.temperatureUnit === 'fahrenheit') {
+      return Math.round(celsius * 1.8 + 32) + '°F'
+    }
+    return Math.round(celsius) + '°C'
+  }
+
   // Location selectors
-  const savedLocation = localStorage.getItem('kisanmind_farmer_location') || ''
+  const savedLocation = profile?.location || ''
   const defaultState = indianStates.find((s) => savedLocation.includes(s)) || 'Uttar Pradesh'
   const [selectedState, setSelectedState] = useState(defaultState)
   const districts = getDistrictsForState(selectedState)
@@ -171,87 +179,94 @@ export default function Weather() {
 
   return (
     <Screen title={t('weatherTitle', lang)} subtitle="Agent 4">
-      {/* Location selector */}
-      {locationSelector}
+      <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:space-y-0">
+        {/* Left Column: Today's Weather & Soil tip */}
+        <div className="lg:col-span-6 space-y-4">
+          {/* Location selector */}
+          {locationSelector}
 
-      {/* Live badge */}
-      <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center mb-3">
-        <Sparkles size={12} /> {lang === 'hi' ? `लाइव मौसम — ${weatherLocation}` : `Live Weather — ${weatherLocation}`}
-      </div>
-
-      {/* Today's highlight card */}
-      <div className="glass active p-5 mb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-[var(--text-dim)] uppercase tracking-wider">{lang === 'hi' ? 'आज का मौसम' : "Today's Weather"}</p>
-            <p className="num text-4xl font-extrabold text-cropbright mt-1" style={{ textShadow: '0 0 24px rgba(46,204,113,0.5)' }}>
-              {Math.round(today.temp_max_c)}°C
-            </p>
-            <p className="text-sm text-[var(--text-dim)] mt-1 capitalize">{today.description}</p>
+          {/* Live badge */}
+          <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center">
+            <Sparkles size={12} /> {lang === 'hi' ? `लाइव मौसम — ${weatherLocation}` : `Live Weather — ${weatherLocation}`}
           </div>
-          <div className="text-right space-y-2">
-            <div>
-              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'आर्द्रता' : 'Humidity'}</p>
-              <p className="text-sm font-bold text-lime">{today.humidity_percent}%</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'हवा' : 'Wind'}</p>
-              <p className="text-sm font-bold">{Math.round(today.wind_speed_kmh)} km/h</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'वर्षा' : 'Rain'}</p>
-              <p className="text-sm font-bold text-lime">{today.rain_probability_percent}%</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* 3-day forecast */}
-      <p className="text-sm font-semibold mb-3">{lang === 'hi' ? '3-दिन का पूर्वानुमान' : '3-Day Forecast'}</p>
-      <div className="space-y-2 mb-4">
-        {forecast3d.map((f, i) => {
-          const Icon = wIcon[f.icon] || Cloud
-          return (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="glass p-3 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3 flex-1">
-                <div className="w-12 text-left">
-                  <p className="text-xs text-[var(--text-dim)]">{f.day}</p>
-                </div>
-                <Icon size={20} className={f.icon === 'rain' ? 'text-lime' : 'text-cropbright'} />
-                {f.desc && (
-                  <span className="text-[10px] text-[var(--text-dim)] truncate max-w-[80px] capitalize">
-                    {f.desc}
-                  </span>
-                )}
+          {/* Today's highlight card */}
+          <div className="glass active p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[var(--text-dim)] uppercase tracking-wider">{lang === 'hi' ? 'आज का मौसम' : "Today's Weather"}</p>
+                <p className="num text-4xl font-extrabold text-cropbright mt-1" style={{ textShadow: '0 0 24px rgba(46,204,113,0.5)' }}>
+                  {formatTemp(today.temp_max_c)}
+                </p>
+                <p className="text-sm text-[var(--text-dim)] mt-1 capitalize">{today.description}</p>
               </div>
-              <div className="flex items-center gap-4 flex-1 justify-end mr-4">
-                <div className="text-right">
-                  <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'तापमान' : 'Temp'}</p>
-                  <p className="num text-sm font-bold">{f.minTemp}°-{f.temp}°C</p>
+              <div className="text-right space-y-2">
+                <div>
+                  <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'आर्द्रता' : 'Humidity'}</p>
+                  <p className="text-sm font-bold text-lime">{today.humidity_percent}%</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'हवा' : 'Wind'}</p>
+                  <p className="text-sm font-bold text-white">{Math.round(today.wind_speed_kmh)} km/h</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-[var(--text-dim)]">{lang === 'hi' ? 'वर्षा' : 'Rain'}</p>
+                  <p className="text-sm font-bold text-lime">{today.rain_probability_percent}%</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'वर्षा' : 'Rain'}</p>
-                <p className="text-sm font-semibold text-lime">{f.rain}%</p>
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
+            </div>
+          </div>
 
-      {/* Soil tip based on live data */}
-      <div className="glass active p-4 mt-5">
-        <div className="flex items-center justify-between mb-1">
-          <p className="flex items-center gap-2 font-semibold"><Sprout size={18} className="text-cropbright" /> {t('soilTip', lang)}</p>
-          <SpeakButton text={soilTipText} label="" />
+          {/* Soil tip based on live data */}
+          <div className="glass active p-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="flex items-center gap-2 font-semibold"><Sprout size={18} className="text-cropbright" /> {t('soilTip', lang)}</p>
+              <SpeakButton text={soilTipText} label="" />
+            </div>
+            <p className="text-sm text-[var(--text-dim)]">{soilTipText}</p>
+          </div>
         </div>
-        <p className="text-sm text-[var(--text-dim)]">{soilTipText}</p>
+
+        {/* Right Column: 3-day forecast */}
+        <div className="lg:col-span-6 space-y-3 mt-4 lg:mt-0">
+          <p className="text-sm font-semibold">{lang === 'hi' ? '3-दिन का पूर्वानुमान' : '3-Day Forecast'}</p>
+          <div className="space-y-2">
+            {forecast3d.map((f, i) => {
+              const Icon = wIcon[f.icon] || Cloud
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="glass p-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-12 text-left">
+                      <p className="text-xs text-[var(--text-dim)]">{f.day}</p>
+                    </div>
+                    <Icon size={20} className={f.icon === 'rain' ? 'text-lime' : 'text-cropbright'} />
+                    {f.desc && (
+                      <span className="text-[10px] text-[var(--text-dim)] truncate max-w-[80px] capitalize">
+                        {f.desc}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 flex-1 justify-end mr-4">
+                    <div className="text-right">
+                      <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'तापमान' : 'Temp'}</p>
+                      <p className="num text-sm font-bold text-white">{formatTemp(f.minTemp)} - {formatTemp(f.temp)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'वर्षा' : 'Rain'}</p>
+                    <p className="text-sm font-semibold text-lime">{f.rain}%</p>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </Screen>
   )

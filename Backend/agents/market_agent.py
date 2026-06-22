@@ -25,9 +25,10 @@ async def _search_mandi_prices(crop_type: str, location: str) -> str:
     """Use Tavily to search for latest mandi prices."""
     client = TavilyClient(api_key=TAVILY_API_KEY)
 
+    # More targeted search query for Indian mandi prices
     query = (
-        f"latest mandi price of {crop_type} in {location} India "
-        f"today per quintal rupees 2024 2025"
+        f"{crop_type} mandi price today {location} India "
+        f"rupees per quintal agmarknet enam"
     )
 
     try:
@@ -42,14 +43,13 @@ async def _search_mandi_prices(crop_type: str, location: str) -> str:
         return json.dumps({"error": str(e)})
 
 
-async def _get_ml_prediction(crop_type: str, location: str) -> dict:
+def _get_ml_prediction(crop_type: str, location: str, current_price: float) -> dict:
     """
     Call the XGBoost price predictor for 7-day forecast.
-    Falls back gracefully if the model isn't trained yet.
+    Uses the actual current price extracted from Tavily/LLM.
     """
     try:
         from models.price_predictor import predict
-
         from datetime import datetime
 
         month = datetime.utcnow().month
@@ -57,11 +57,21 @@ async def _get_ml_prediction(crop_type: str, location: str) -> dict:
             crop=crop_type,
             state=location,
             month=month,
-            last_price=2500.0,  # placeholder; in production, use last known price
+            last_price=current_price,
         )
         return prediction
     except Exception as e:
         return {"predicted_price": None, "confidence": None, "error": str(e)}
+
+
+def _get_fallback_price(crop_type: str) -> float:
+    """Get a realistic fallback price from the price_predictor ranges."""
+    try:
+        from models.price_predictor import PRICE_RANGES
+        low, high = PRICE_RANGES.get(crop_type.lower().replace("_", " "), (1500, 3000))
+        return (low + high) / 2
+    except Exception:
+        return 2500.0
 
 
 async def run_market_agent(state: KisanMindState) -> KisanMindState:
@@ -75,35 +85,35 @@ async def run_market_agent(state: KisanMindState) -> KisanMindState:
     location = state.get("location", "Delhi")
 
     try:
-        # Parallel data gathering
+        # Step 1: Search for real-time prices via Tavily
         search_results = await _search_mandi_prices(crop_type, location)
-        ml_prediction = await _get_ml_prediction(crop_type, location)
 
-        # Use LLM to synthesize
+        # Step 2: Use LLM to extract current price from search results
         llm = get_llm()
 
         prompt = f"""You are an Indian agricultural market analyst.
-Given the following real-time mandi price search results and ML prediction,
-provide a market advisory for a farmer growing {crop_type} in {location}.
+A farmer growing {crop_type} in {location} wants to know the current mandi price.
+
+Below are real-time search results about mandi prices. Extract the current market price
+and provide a market advisory.
 
 Search Results:
 {search_results}
 
-ML Price Prediction (7 days):
-{json.dumps(ml_prediction, default=str)}
-
 Return a JSON with exactly these fields:
 {{
-  "current_price_per_quintal": <number, best estimate in ₹>,
+  "current_price_per_quintal": <number, the actual current mandi price in ₹ extracted from search results>,
   "price_trend": "up" | "down" | "stable",
-  "best_mandi": "<name of the best nearby mandi>",
+  "best_mandi": "<name of the best nearby mandi from search results>",
   "recommendation": "sell_now" or "wait",
   "data_source": "tavily + xgboost"
 }}
 
-Rules:
-- Use realistic Indian mandi prices (e.g. wheat ~2200-2800, rice ~2500-3500, cotton ~6000-8000 per quintal)
-- If data is unclear, make your best informed estimate
+CRITICAL RULES:
+- Extract the ACTUAL price from the search results — do NOT guess or use generic ranges
+- current_price_per_quintal MUST be a specific number found in the search data
+- If multiple prices are found, use the modal/average price
+- If no specific price is found in search results, use your best knowledge of current Indian mandi rates for {crop_type}
 - Return ONLY the JSON, no markdown fences
 """
 
@@ -117,7 +127,24 @@ Rules:
             raw = raw.rsplit("```", 1)[0]
         raw = raw.strip()
 
-        parsed = json.loads(raw)
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            import re
+            match = re.search(r'\{[\s\S]*\}', raw)
+            if match:
+                parsed = json.loads(match.group())
+            else:
+                raise ValueError(f"No valid JSON in market response: {raw[:200]}")
+
+        # Step 3: Use the extracted current price to feed ML prediction
+        current_price = parsed.get("current_price_per_quintal", _get_fallback_price(crop_type))
+        if not isinstance(current_price, (int, float)) or current_price <= 0:
+            current_price = _get_fallback_price(crop_type)
+
+        ml_prediction = _get_ml_prediction(crop_type, location, current_price)
+
+        print(f"📊 Market: {crop_type} in {location} → ₹{current_price}/q → ML predicts ₹{ml_prediction.get('predicted_price')}/q in 7d")
 
         # Merge ML prediction data
         parsed["predicted_price_7d"] = ml_prediction.get("predicted_price")

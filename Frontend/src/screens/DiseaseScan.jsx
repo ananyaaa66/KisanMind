@@ -21,7 +21,7 @@ const sevLabel = {
 }
 
 export default function DiseaseScan() {
-  const { lang, runAdvisoryPipeline, loading, advisoryData, setReportOpen } = useApp()
+  const { lang, runAdvisoryPipeline, loading, advisoryData, setAdvisoryData, setReportOpen } = useApp()
   
   // Form states
   const [cropType, setCropType] = useState('wheat')
@@ -62,10 +62,11 @@ export default function DiseaseScan() {
     setSelectedFile(null)
     setPreviewUrl(null)
     setQuery('')
+    setAdvisoryData(null)
   }
 
   // Active result mappings
-  const activeResult = advisoryData && advisoryData.crop_type === cropType ? advisoryData : null
+  const activeResult = advisoryData || null
   const hasDiseaseResult = activeResult && activeResult.disease_result
 
   return (
@@ -89,228 +90,249 @@ export default function DiseaseScan() {
 
       {/* Input state */}
       {!loading && !activeResult && (
-        <form onSubmit={handleScan} className="space-y-4 animate-sprout">
+        <form onSubmit={handleScan} className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 animate-sprout">
           {/* Photo Uploader / Preview */}
-          <div 
-            onClick={() => fileInputRef.current.click()}
-            className="glass aspect-[4/3] grid place-items-center text-[var(--text-dim)] cursor-pointer hover:border-crop/50 transition relative overflow-hidden"
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              accept="image/*" 
-              className="hidden" 
-            />
-            {previewUrl ? (
-              <img 
-                src={previewUrl} 
-                alt="Crop preview" 
-                className="w-full h-full object-cover" 
+          <div className="lg:col-span-5 flex flex-col">
+            <div 
+              onClick={() => fileInputRef.current.click()}
+              className="glass aspect-[4/3] lg:aspect-auto lg:flex-1 grid place-items-center text-[var(--text-dim)] cursor-pointer hover:border-crop/50 transition relative overflow-hidden min-h-[260px]"
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept="image/*" 
+                className="hidden" 
               />
-            ) : (
-              <div className="text-center px-6">
-                <Sprout className="mx-auto text-crop/50" size={40} />
-                <p className="text-sm mt-2 font-medium text-cropbright">
-                  {lang === 'hi' ? 'पत्ती की फोटो अपलोड करें (वैकल्पिक)' : 'Upload leaf photo (Optional)'}
-                </p>
-                <p className="text-xs text-[var(--text-dim)] mt-1">
-                  {lang === 'hi' ? 'एआई रोग का पता लगाने में मदद करेगा' : 'AI will detect diseases if uploaded'}
-                </p>
-              </div>
-            )}
+              {previewUrl ? (
+                <img 
+                  src={previewUrl} 
+                  alt="Crop preview" 
+                  className="w-full h-full object-cover absolute inset-0" 
+                />
+              ) : (
+                <div className="text-center px-6">
+                  <Sprout className="mx-auto text-crop/50" size={40} />
+                  <p className="text-sm mt-2 font-medium text-cropbright">
+                    {lang === 'hi' ? 'पत्ती की फोटो अपलोड करें (वैकल्पिक)' : 'Upload leaf photo (Optional)'}
+                  </p>
+                  <p className="text-xs text-[var(--text-dim)] mt-1">
+                    {lang === 'hi' ? 'एआई रोग का पता लगाने में मदद करेगा' : 'AI will detect diseases if uploaded'}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Form Fields */}
-          <div className="glass p-4 space-y-3">
-            {/* Crop Selector */}
-            <div>
-              <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1">
-                {lang === 'hi' ? 'फसल चुनें' : 'Select Crop'}
-              </label>
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {cropsList.map((c) => (
-                  <button
-                    type="button"
-                    key={c.id}
-                    onClick={() => setCropType(c.id)}
-                    className={`shrink-0 px-3 py-2 rounded-full border transition flex items-center gap-1.5 text-sm font-semibold ${
-                      cropType === c.id 
-                        ? 'bg-crop text-ink border-crop glow-green' 
-                        : 'glass border-white/5 text-[var(--text-dim)]'
-                    }`}
-                  >
-                    <span>{c.icon}</span> {c.label[lang]}
-                  </button>
-                ))}
+          <div className="lg:col-span-7 space-y-4 flex flex-col">
+            <div className="glass p-4 space-y-3 flex-1">
+              {/* Crop Selector */}
+              <div>
+                <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1">
+                  {lang === 'hi' ? 'फसल चुनें' : 'Select Crop'}
+                </label>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                  {cropsList.map((c) => (
+                    <button
+                      type="button"
+                      key={c.id}
+                      onClick={() => setCropType(c.id)}
+                      className={`shrink-0 px-3 py-2 rounded-full border transition flex items-center gap-1.5 text-sm font-semibold ${
+                        cropType === c.id 
+                          ? 'bg-crop text-ink border-crop glow-green' 
+                          : 'glass border-white/5 text-[var(--text-dim)]'
+                      }`}
+                    >
+                      <span>{c.icon}</span> {c.label[lang]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Location Input */}
+              <div>
+                <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1 flex items-center gap-1">
+                  <MapPin size={12} className="text-cropbright" />
+                  {lang === 'hi' ? 'स्थान' : 'Location'}
+                </label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-crop"
+                  placeholder={lang === 'hi' ? 'जैसे: नासिक, महाराष्ट्र' : 'e.g., Nashik, Maharashtra'}
+                />
+              </div>
+
+              {/* Query Question Input */}
+              <div>
+                <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1 flex items-center gap-1">
+                  <HelpCircle size={12} className="text-cropbright" />
+                  {lang === 'hi' ? 'एआई से सवाल पूछें (वैकल्पिक)' : 'Ask AI a question (Optional)'}
+                </label>
+                <textarea
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-crop resize-none"
+                  placeholder={
+                    lang === 'hi'
+                      ? 'जैसे: पत्तियों पर पीले धब्बे आ गए हैं, क्या करें?'
+                      : 'e.g., Yellow spots appeared on leaf borders, what should I do?'
+                  }
+                />
               </div>
             </div>
 
-            {/* Location Input */}
-            <div>
-              <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1 flex items-center gap-1">
-                <MapPin size={12} className="text-cropbright" />
-                {lang === 'hi' ? 'स्थान' : 'Location'}
-              </label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                required
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-crop"
-                placeholder={lang === 'hi' ? 'जैसे: नासिक, महाराष्ट्र' : 'e.g., Nashik, Maharashtra'}
-              />
-            </div>
-
-            {/* Query Question Input */}
-            <div>
-              <label className="text-xs text-[var(--text-dim)] font-semibold block mb-1 flex items-center gap-1">
-                <HelpCircle size={12} className="text-cropbright" />
-                {lang === 'hi' ? 'एआई से सवाल पूछें (वैकल्पिक)' : 'Ask AI a question (Optional)'}
-              </label>
-              <textarea
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                rows={2}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-crop resize-none"
-                placeholder={
-                  lang === 'hi'
-                    ? 'जैसे: पत्तियों पर पीले धब्बे आ गए हैं, क्या करें?'
-                    : 'e.g., Yellow spots appeared on leaf borders, what should I do?'
-                }
-              />
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
-            {previewUrl && (
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              {previewUrl && (
+                <button 
+                  type="button" 
+                  onClick={reset} 
+                  className="glass !rounded-2xl px-4 text-sm text-red-400 font-semibold"
+                >
+                  {lang === 'hi' ? 'हटाएं' : 'Clear'}
+                </button>
+              )}
               <button 
-                type="button" 
-                onClick={reset} 
-                className="glass !rounded-2xl px-4 text-sm text-red-400 font-semibold"
+                type="submit" 
+                className="tap flex-1 rounded-2xl py-4 font-bold text-ink flex items-center justify-center gap-2 glow-green animate-none"
+                style={{ background: 'linear-gradient(90deg,#2ECC71,#3DDC84)' }}
               >
-                {lang === 'hi' ? 'हटाएं' : 'Clear'}
+                <Camera size={20} /> 
+                {selectedFile 
+                  ? (lang === 'hi' ? 'फसल की जांच करें' : 'Analyze Crop Health') 
+                  : (lang === 'hi' ? 'सलाह प्राप्त करें' : 'Get AI Advisory')
+                }
               </button>
-            )}
-            <button 
-              type="submit" 
-              className="tap flex-1 rounded-2xl py-4 font-bold text-ink flex items-center justify-center gap-2 glow-green"
-              style={{ background: 'linear-gradient(90deg,#2ECC71,#3DDC84)' }}
-            >
-              <Camera size={20} /> 
-              {selectedFile 
-                ? (lang === 'hi' ? 'फसल की जांच करें' : 'Analyze Crop Health') 
-                : (lang === 'hi' ? 'सलाह प्राप्त करें' : 'Get AI Advisory')
-              }
-            </button>
+            </div>
           </div>
         </form>
       )}
 
       {/* Result state */}
       {!loading && activeResult && (
-        <div className="space-y-3 animate-sprout">
-          {hasDiseaseResult ? (
-            /* Real Disease detection card */
-            <div className="glass active p-4">
-              <div className="flex items-start justify-between mb-4">
+        <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 animate-sprout">
+          {/* Left Column: Diagnostics */}
+          <div className="lg:col-span-7 space-y-3">
+            {hasDiseaseResult ? (
+              /* Real Disease detection card */
+              <div className="glass active p-4 h-full flex flex-col justify-between">
                 <div>
-                  <p className="text-xs text-[var(--text-dim)]">
-                    {activeResult.disease_result.image_analysis_summary || 'Gemini Vision AI Pathogen Scan'}
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <p className="text-xs text-[var(--text-dim)]">
+                        {activeResult.disease_result.image_analysis_summary ? 'Pathogen Pattern Detected' : 'Gemini Vision AI Pathogen Scan'}
+                      </p>
+                      <h3 className="text-xl font-bold mt-1 text-cropbright">
+                        {activeResult.disease_result.disease_name}
+                      </h3>
+                    </div>
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${sevColor[activeResult.disease_result.severity || 'low']}`}>
+                      {t('severity', lang)}: {sevLabel[activeResult.disease_result.severity || 'low'][lang]}
+                    </span>
+                  </div>
+
+                  {/* Confidence & Affected area */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="flex flex-col items-center justify-center p-3 bg-black/10 rounded-xl">
+                      <p className="text-xs text-[var(--text-dim)] mb-2.5">
+                        {lang === 'hi' ? 'विश्वास स्तर' : 'AI Confidence'}
+                      </p>
+                      <RadialGauge 
+                        value={activeResult.disease_result.confidence_score} 
+                        severity={activeResult.disease_result.severity || 'low'} 
+                      />
+                    </div>
+                    <div className="flex flex-col items-center justify-center p-3 bg-black/10 rounded-xl">
+                      <p className="text-xs text-[var(--text-dim)] mb-1">
+                        {lang === 'hi' ? 'प्रभावित क्षेत्र' : 'Affected Area'}
+                      </p>
+                      <p className="text-4xl font-extrabold text-lime mt-2">
+                        {activeResult.disease_result.affected_area_percent}%
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-[var(--text-dim)] leading-relaxed">
+                    {activeResult.disease_result.image_analysis_summary}
                   </p>
-                  <h3 className="text-xl font-bold mt-1">
-                    {activeResult.disease_result.disease_name}
+                </div>
+                <div className="mt-4 pt-3 border-t border-white/5">
+                  <SpeakButton text={`${activeResult.disease_result.disease_name}, ${lang === 'hi' ? 'तीव्रता' : 'severity'} ${activeResult.disease_result.severity}. Treatment: ${activeResult.disease_result.treatment}`} />
+                </div>
+              </div>
+            ) : (
+              /* General Advisory fallback when no image was uploaded */
+              <div className="glass active p-6 text-center space-y-4 h-full flex flex-col justify-center items-center">
+                <div className="w-16 h-16 rounded-full bg-crop/15 text-cropbright flex items-center justify-center text-2xl">
+                  📝
+                </div>
+                <div>
+                  <h3 className="font-bold text-xl text-cropbright">
+                    {lang === 'hi' ? 'सामान्य कृषि सलाह तैयार' : 'AI Advisory Prepared'}
                   </h3>
-                </div>
-                <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${sevColor[activeResult.disease_result.severity || 'low']}`}>
-                  {t('severity', lang)}: {sevLabel[activeResult.disease_result.severity || 'low'][lang]}
-                </span>
-              </div>
-
-              {/* Confidence & Affected area */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <p className="text-xs text-[var(--text-dim)] mb-1">
-                    {lang === 'hi' ? 'विश्वास स्तर' : 'AI Confidence'}
-                  </p>
-                  <p className="text-lg font-bold text-lime">
-                    {activeResult.disease_result.confidence_score}%
+                  <p className="text-sm text-[var(--text-dim)] mt-2 max-w-sm mx-auto leading-relaxed">
+                    {lang === 'hi' 
+                      ? `कोई फोटो अपलोड नहीं की गई, लेकिन ${cropType} फसल के लिए मौसम, मंडी और योजनाओं की सलाह तैयार है।` 
+                      : `No leaf photo uploaded, but Weather, Market, and Schemes advice for ${cropType} has been calculated.`
+                    }
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <RadialGauge 
-                    value={activeResult.disease_result.affected_area_percent} 
-                    severity={activeResult.disease_result.severity || 'low'} 
-                  />
-                </div>
               </div>
-
-              <p className="text-sm text-[var(--text-dim)]">
-                {activeResult.disease_result.image_analysis_summary}
-              </p>
-              <div className="mt-3">
-                <SpeakButton text={`${activeResult.disease_result.disease_name}, ${lang === 'hi' ? 'तीव्रता' : 'severity'} ${activeResult.disease_result.severity}. Treatment: ${activeResult.disease_result.treatment}`} />
-              </div>
-            </div>
-          ) : (
-            /* General Advisory fallback when no image was uploaded */
-            <div className="glass active p-4 text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-crop/15 text-cropbright flex items-center justify-center text-xl mx-auto">
-                📝
-              </div>
-              <h3 className="font-bold text-lg">
-                {lang === 'hi' ? 'सामान्य कृषि सलाह तैयार' : 'AI Advisory Prepared'}
-              </h3>
-              <p className="text-sm text-[var(--text-dim)]">
-                {lang === 'hi' 
-                  ? `कोई फोटो अपलोड नहीं की गई, लेकिन ${cropType} फसल के लिए मौसम, मंडी और योजनाओं की सलाह तैयार है।` 
-                  : `No leaf photo uploaded, but Weather, Market, and Schemes advice for ${cropType} has been calculated.`
-                }
-              </p>
-            </div>
-          )}
-
-          {/* Quick links to see detailed tabs */}
-          {hasDiseaseResult && activeResult.disease_result.treatment && (
-            <div className="glass p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold">{t('treatment', lang)}</h4>
-                <SpeakButton text={activeResult.disease_result.treatment} label="" />
-              </div>
-              <Row icon={FlaskConical} label={activeResult.disease_result.treatment} sub={lang === 'hi' ? 'उपचार विधि' : 'Treatment & Pesticide'} />
-            </div>
-          )}
-
-          {/* Show full report action */}
-          <div className="glass p-4 flex items-center justify-between">
-            <div>
-              <h4 className="font-bold text-sm">{lang === 'hi' ? 'विस्तृत रिपोर्ट तैयार' : 'Full Advisory Report'}</h4>
-              <p className="text-xs text-[var(--text-dim)] mt-0.5">
-                {lang === 'hi' ? 'सभी ५ सलाहकारों की संयुक्त समीक्षा' : 'Aggregated response from all agents'}
-              </p>
-            </div>
-            <button 
-              onClick={() => setReportOpen(true)}
-              className="tap bg-crop text-ink px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 glow-green"
-            >
-              <FileText size={14} /> {lang === 'hi' ? 'रिपोर्ट देखें' : 'View Report'}
-            </button>
+            )}
           </div>
 
-          <button 
-            onClick={() => setReportOpen(true)}
-            className="tap w-full glass !rounded-2xl py-3 font-semibold flex items-center justify-center gap-2 text-cropbright"
-          >
-            <MessageCircle size={18} /> {t('askFollowup', lang)}
-          </button>
-          
-          <button 
-            onClick={reset} 
-            className="tap w-full text-sm text-[var(--text-dim)] py-2"
-          >
-            ↺ {lang === 'hi' ? 'फिर से स्कैन करें' : 'Scan / Ask Again'}
-          </button>
+          {/* Right Column: Actions / Treatments */}
+          <div className="lg:col-span-5 space-y-3">
+            {hasDiseaseResult && activeResult.disease_result.treatment && (
+              <div className="glass p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold">{t('treatment', lang)}</h4>
+                  <SpeakButton text={activeResult.disease_result.treatment} label="" />
+                </div>
+                <Row icon={FlaskConical} label={activeResult.disease_result.treatment} sub={lang === 'hi' ? 'उपचार विधि' : 'Treatment & Pesticide'} />
+              </div>
+            )}
+
+            {/* Show full report action */}
+            <div className="glass p-4 flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-sm">{lang === 'hi' ? 'विस्तृत रिपोर्ट तैयार' : 'Full Advisory Report'}</h4>
+                <p className="text-xs text-[var(--text-dim)] mt-0.5">
+                  {lang === 'hi' ? 'सभी ५ सलाहकारों की संयुक्त समीक्षा' : 'Aggregated response from all agents'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setReportOpen(true)}
+                className="tap bg-crop text-ink px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 glow-green"
+              >
+                <FileText size={14} /> {lang === 'hi' ? 'रिपोर्ट देखें' : 'View Report'}
+              </button>
+            </div>
+
+            <button 
+              onClick={() => {
+                setAdvisoryData(null)
+                setSelectedFile(null)
+                setPreviewUrl(null)
+                setQuery('')
+              }}
+              className="tap w-full glass !rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 text-cropbright"
+            >
+              <MessageCircle size={18} /> {t('askFollowup', lang)}
+            </button>
+            
+            <button 
+              onClick={reset} 
+              className="tap w-full text-sm text-[var(--text-dim)] py-2 border border-white/5 rounded-2xl hover:bg-white/5 transition-colors"
+            >
+              ↺ {lang === 'hi' ? 'फिर से स्कैन करें' : 'Scan / Ask Again'}
+            </button>
+          </div>
         </div>
       )}
     </Screen>

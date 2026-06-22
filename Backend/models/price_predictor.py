@@ -27,7 +27,7 @@ ENCODERS_PATH = os.path.join(MODEL_DIR, "price_encoders.pkl")
 DATASET_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "Dataset",
                             "agmarknet_india_historical_prices_2024_2025.csv")
 
-# ── Crop & state lists matching the agmarknet dataset ──
+# ── Canonical crop names (lowercase IDs used everywhere) ──
 CROPS = [
     "wheat", "rice", "cotton", "sugarcane", "soyabean",
     "maize", "bajra", "jowar", "mustard", "groundnut",
@@ -37,17 +37,13 @@ CROPS = [
     "banana", "mango", "apple", "gur",
 ]
 
+# Only include states that exist in the agmarknet dataset
 STATES = [
-    "Maharashtra", "Punjab", "Haryana", "Uttar Pradesh",
-    "Madhya Pradesh", "Rajasthan", "Gujarat", "Karnataka",
-    "Tamil Nadu", "Andhra Pradesh", "West Bengal", "Bihar",
-    "Odisha", "Telangana", "Chhattisgarh", "Kerala",
-    "Jharkhand", "Assam", "Himachal Pradesh", "Uttarakhand",
-    "Goa", "Manipur", "Meghalaya", "Mizoram", "Nagaland",
-    "Sikkim", "Tripura", "Arunachal Pradesh", "Delhi",
+    "Andhra Pradesh", "Gujarat", "Kerala", "Madhya Pradesh",
+    "Punjab", "Rajasthan", "Uttar Pradesh", "West Bengal",
 ]
 
-# Dataset commodity name → our crop id
+# Dataset commodity name → our canonical crop id (lowercase)
 DATASET_COMMODITY_MAP = {
     "Wheat": "wheat",
     "Maize": "maize",
@@ -107,6 +103,25 @@ def _get_season(month: int) -> int:
         return 4
 
 
+def _normalize_crop_name(name: str) -> str:
+    """
+    Normalize any crop name to our canonical lowercase ID.
+    Handles frontend IDs (green_gram), dataset names (Bajra(Pearl Millet/Cumbu)),
+    and already-canonical names (bajra).
+    """
+    # Try direct match after basic cleanup
+    cleaned = name.lower().strip().replace("_", " ")
+    if cleaned in CROPS:
+        return cleaned
+
+    # Try matching from dataset commodity map (case-insensitive)
+    for dataset_name, canonical in DATASET_COMMODITY_MAP.items():
+        if dataset_name.lower() == cleaned:
+            return canonical
+
+    return cleaned
+
+
 def _load_real_dataset() -> pd.DataFrame | None:
     """
     Load the agmarknet CSV and transform it into training-ready format.
@@ -120,7 +135,7 @@ def _load_real_dataset() -> pd.DataFrame | None:
         print(f"📊 Loading real dataset from {DATASET_PATH}...")
         df = pd.read_csv(DATASET_PATH)
 
-        # Map commodity names to our crop ids
+        # Map commodity names to our canonical crop IDs
         df["crop"] = df["Commodity"].map(DATASET_COMMODITY_MAP)
         df = df.dropna(subset=["crop"])
 
@@ -169,8 +184,11 @@ def _load_real_dataset() -> pd.DataFrame | None:
             print(f"⚠️  Only {len(records)} records from real data, falling back to synthetic.")
             return None
 
+        result_df = pd.DataFrame(records)
         print(f"✅ Loaded {len(records)} training records from real dataset.")
-        return pd.DataFrame(records)
+        print(f"   Crops: {sorted(result_df['crop'].unique())}")
+        print(f"   States: {sorted(result_df['state'].unique())}")
+        return result_df
 
     except Exception as e:
         print(f"⚠️  Error loading dataset: {e}. Falling back to synthetic data.")
@@ -187,7 +205,7 @@ def _generate_synthetic_data(n_samples: int = 5000) -> pd.DataFrame:
     records = []
     for _ in range(n_samples):
         crop = np.random.choice(CROPS)
-        state = np.random.choice(STATES[:15])  # Use primary states
+        state = np.random.choice(STATES)
         month = np.random.randint(1, 13)
         season = _get_season(month)
 
@@ -269,6 +287,9 @@ def train_model(data: pd.DataFrame = None) -> dict:
     joblib.dump(model, MODEL_PATH)
     joblib.dump({"crop": crop_enc, "state": state_enc}, ENCODERS_PATH)
 
+    print(f"   Encoder crops: {list(crop_enc.classes_)}")
+    print(f"   Encoder states: {list(state_enc.classes_)}")
+
     return {
         "mae": round(mae, 2),
         "r2_score": round(r2, 4),
@@ -283,7 +304,7 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     Predict 7-day crop price.
 
     Args:
-        crop: crop name (e.g. "wheat")
+        crop: crop name (e.g. "wheat", "green_gram")
         state: Indian state name (e.g. "Punjab")
         month: current month (1-12)
         last_price: last known price per quintal
@@ -303,19 +324,30 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     crop_enc = encoders["crop"]
     state_enc = encoders["state"]
 
-    # Normalize crop name: handle frontend IDs like 'green_gram' -> 'green gram'
-    crop_normalized = crop.lower().replace("_", " ")
+    # Normalize crop name using the shared normalizer
+    crop_normalized = _normalize_crop_name(crop)
 
-    # Handle unseen categories gracefully
-    try:
+    # Handle unseen crops gracefully
+    known_crops = list(crop_enc.classes_)
+    if crop_normalized in known_crops:
         crop_code = crop_enc.transform([crop_normalized])[0]
-    except ValueError:
-        crop_code = 0  # fallback to first crop
+    else:
+        # Find closest match or use fallback
+        print(f"⚠️  Unknown crop '{crop_normalized}', known: {known_crops}")
+        crop_code = 0
 
-    try:
+    # Handle unseen states — return error for states not in dataset
+    known_states = list(state_enc.classes_)
+    if state in known_states:
         state_code = state_enc.transform([state])[0]
-    except ValueError:
-        state_code = 0  # fallback to first state
+    else:
+        return {
+            "predicted_price": None,
+            "confidence": 0,
+            "prediction_horizon_days": 7,
+            "model_type": "XGBoost Regressor",
+            "error": f"No training data for state '{state}'. Available: {', '.join(known_states)}",
+        }
 
     season = _get_season(month)
 

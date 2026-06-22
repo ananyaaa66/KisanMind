@@ -114,3 +114,41 @@ export async function fetchPrediction(crop = 'tomato', state = 'Maharashtra', mo
   }
   return response.json();
 }
+
+/**
+ * Get current LLM model info.
+ * @returns {Promise<object>} { success, provider, model, api_key_set, available_providers }
+ */
+export async function getModelInfo() {
+  const response = await fetch(`${API_BASE_URL}/settings/model`);
+  if (!response.ok) {
+    throw new Error('Failed to get model info');
+  }
+  return response.json();
+}
+
+/**
+ * Switch the active LLM provider and model at runtime.
+ * @param {string} provider - Provider name (gemini, groq, ollama, openrouter, openai)
+ * @param {string} [modelName] - Optional model name override
+ * @returns {Promise<object>} { success, message, provider, model }
+ */
+export async function switchModel(provider, modelName = null) {
+  const formData = new FormData();
+  formData.append('provider', provider);
+  if (modelName) {
+    formData.append('model_name', modelName);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/settings/model`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ detail: 'Failed to switch model' }));
+    throw new Error(errData.detail || 'Failed to switch model');
+  }
+  return response.json();
+}
+

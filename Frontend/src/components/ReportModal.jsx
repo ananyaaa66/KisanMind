@@ -6,7 +6,7 @@ import GrowthLine from './GrowthLine.jsx'
 
 
 export default function ReportModal() {
-  const { reportOpen, setReportOpen, lang, speak, advisoryData, exportPdf } = useApp()
+  const { reportOpen, setReportOpen, lang, speak, advisoryData, exportPdf, profile } = useApp()
 
   const readAll = () => {
     if (advisoryData && advisoryData.final_report) {
@@ -45,15 +45,15 @@ export default function ReportModal() {
   return (
     <AnimatePresence>
       {reportOpen && (
-        <motion.div className="fixed inset-0 z-50 flex items-end justify-center"
+        <motion.div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center lg:p-4"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={() => setReportOpen(false)}
-          style={{ background: 'rgba(0,0,0,0.6)' }}>
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 280 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[480px] bg-panel rounded-t-3xl border-t border-crop/30 max-h-[88vh] flex flex-col">
+            className="w-full max-w-[480px] lg:max-w-[680px] bg-panel rounded-t-3xl lg:rounded-2xl border-t lg:border border-crop/30 max-h-[88vh] lg:max-h-[80vh] flex flex-col shadow-2xl">
             
             {/* Header */}
             <div className="flex items-center justify-between p-4 pb-2">
@@ -71,7 +71,7 @@ export default function ReportModal() {
             {/* Content Body */}
             <div className="overflow-y-auto scrollbar-hide px-4 pb-6 flex-1">
               <p className="text-xs text-[var(--text-dim)] mb-3">
-                {localStorage.getItem('kisanmind_farmer_name') || 'Farmer'} · {advisoryData?.location || localStorage.getItem('kisanmind_farmer_location') || 'Delhi'} · {advisoryData?.timestamp ? new Date(advisoryData.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today'}
+                {profile?.name || 'Farmer'} · {advisoryData?.location || profile?.location || 'Delhi'} · {advisoryData?.timestamp ? new Date(advisoryData.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Today'}
               </p>
               <GrowthLine className="mb-4 opacity-70" />
               
