@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion'
-import { ChevronLeft, FileText, ChevronRight, Sparkles } from 'lucide-react'
+import { ChevronLeft, FileText, ChevronRight, Sparkles, Trash2 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { t } from '../data/i18n.js'
 import SpeakButton from '../components/SpeakButton.jsx'
 
 export default function AdvisoryReports({ onBack }) {
-  const { lang, reportsHistory, setAdvisoryData, setReportOpen } = useApp()
+  const { lang, reportsHistory, setAdvisoryData, setReportOpen, deleteReport } = useApp()
 
   const handleReportClick = (report) => {
     if (report.reportText) {
@@ -17,6 +17,11 @@ export default function AdvisoryReports({ onBack }) {
       })
       setReportOpen(true)
     }
+  }
+
+  const handleDelete = (e, reportId) => {
+    e.stopPropagation()
+    deleteReport(reportId)
   }
 
   return (
@@ -36,16 +41,16 @@ export default function AdvisoryReports({ onBack }) {
       <div className="glass p-4 relative overflow-hidden">
         {reportsHistory.length > 0 && (
           <div className="absolute top-2 right-2 text-lime flex items-center gap-1 bg-lime/10 px-2 py-0.5 rounded-full text-[10px] font-bold border border-lime/30">
-            <Sparkles size={10} /> {lang === 'hi' ? 'क्लाउड सिंक' : 'ChromaDB Sync'}
+            <Sparkles size={10} /> {lang === 'hi' ? 'लोकल सेव्ड' : 'Saved Locally'}
           </div>
         )}
         <h1 className="text-2xl font-bold mb-1">{t('advisoryReports', lang)}</h1>
         <p className="text-sm text-gray-400">{reportsHistory.length} {t('reports', lang)}</p>
       </div>
 
-      {/* Reports list — live only */}
+      {/* Reports list */}
       {reportsHistory.length > 0 ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {reportsHistory.map((report, idx) => (
             <motion.div
               key={report.id}
@@ -53,24 +58,35 @@ export default function AdvisoryReports({ onBack }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
               onClick={() => handleReportClick(report)}
-              className="cursor-pointer"
+              className="cursor-pointer h-full"
             >
-              <div className="glass p-4 border border-white/10 hover:border-crop/40 transition-all rounded-xl flex items-center gap-3">
-                <span className="grid place-items-center w-10 h-10 rounded-xl bg-crop/10 text-cropbright shrink-0">
-                  <FileText size={20} />
-                </span>
-                
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-white text-sm mb-0.5 truncate">{report.title[lang]}</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{report.date}</span>
-                    <span className="text-[10px] bg-white/5 text-[var(--text-dim)] px-2 py-0.5 rounded border border-white/5 uppercase">
-                      {report.crop}
-                    </span>
+              <div className="glass p-4 border border-white/10 hover:border-crop/40 transition-all rounded-xl flex items-center gap-3 h-full justify-between">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="grid place-items-center w-10 h-10 rounded-xl bg-crop/10 text-cropbright shrink-0">
+                    <FileText size={20} />
+                  </span>
+                  
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-white text-sm mb-0.5 truncate">{report.title[lang]}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{report.date}</span>
+                      <span className="text-[10px] bg-white/5 text-[var(--text-dim)] px-2 py-0.5 rounded border border-white/5 uppercase">
+                        {report.crop}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <ChevronRight size={18} className="text-gray-400 shrink-0" />
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => handleDelete(e, report.id)}
+                    className="p-2 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
+                    title={lang === 'hi' ? 'मिटाएँ' : 'Delete'}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <ChevronRight size={18} className="text-gray-400" />
+                </div>
               </div>
             </motion.div>
           ))}

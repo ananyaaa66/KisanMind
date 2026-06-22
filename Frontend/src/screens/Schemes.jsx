@@ -51,135 +51,150 @@ export default function Schemes() {
       hi: s.application_steps ? s.application_steps.split('\n').filter(Boolean) : ['आवेदन के लिए आधिकारिक पोर्टल पर जाएं']
     },
     deadline: { en: s.deadline || 'Rolling', hi: s.deadline || 'लगातार चालू' },
-    link: s.link,
+    source_url: s.source_url,
+    confidence: s.confidence || 'low',
   })) || []
 
   return (
     <Screen title={t('schemesTitle', lang)} subtitle="Agent 3">
-      {/* Form */}
-      <div className="glass p-4 space-y-4">
-        <div>
-          <label className="text-xs text-[var(--text-dim)]">{t('state', lang)}</label>
-          <div className="relative">
-            <select value={state} onChange={(e) => setState(e.target.value)}
-              className="tap w-full mt-1 bg-panel border border-crop/20 rounded-xl px-3 text-sm focus:border-crop outline-none appearance-none pr-8">
-              {indianStates.map((s) => <option key={s} className="bg-panel">{s}</option>)}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)] pointer-events-none" />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-[var(--text-dim)]">{t('cropType', lang)}</label>
-          <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-hide">
-            {crops.map((c) => (
-              <button key={c.id} onClick={() => setCrop(c.id)}
-                className={`tap !min-h-0 shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  crop === c.id ? 'bg-crop text-ink border-crop' : 'border-white/10 text-[var(--text-dim)]'}`}>
-                {c.icon} {c.label[lang]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className="tap w-full bg-crop text-ink rounded-xl font-semibold py-3 flex items-center justify-center gap-2 glow-green disabled:opacity-50"
-        >
-          {loading ? (
-            <><Loader2 size={16} className="animate-spin" /> {lang === 'hi' ? 'खोज रहे हैं...' : 'Searching...'}</>
-          ) : (
-            <>{lang === 'hi' ? 'योजनाएँ खोजें' : 'Search Schemes'}</>
-          )}
-        </button>
-      </div>
-
-      {/* Loading state */}
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <Loader2 size={28} className="animate-spin text-lime" />
-          <p className="text-sm text-[var(--text-dim)]">
-            {lang === 'hi' ? 'Tavily से योजनाएँ खोज रहे हैं...' : 'Searching schemes via Tavily AI...'}
-          </p>
-        </div>
-      )}
-
-      {/* Error state */}
-      {error && !loading && (
-        <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-          <WifiOff size={28} className="text-red-400" />
-          <p className="text-sm text-red-400 font-semibold">{lang === 'hi' ? 'योजनाएँ लोड नहीं हो सकीं' : 'Failed to load schemes'}</p>
-          <p className="text-xs text-[var(--text-dim)] max-w-xs">{error}</p>
-        </div>
-      )}
-
-      {/* Scheme results */}
-      {!loading && !error && hasFetched && (
-        <div className="mt-4 space-y-3">
-          <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center">
-            <Sparkles size={12} /> {lang === 'hi' ? `${displaySchemes.length} योजनाएँ Tavily से मिलीं` : `${displaySchemes.length} schemes found via Tavily AI`}
-          </div>
-
-          {displaySchemes.length === 0 ? (
-            <div className="glass p-4 text-center text-xs text-[var(--text-dim)]">
-              {lang === 'hi' ? 'कोई योजना नहीं मिली।' : 'No schemes found.'}
-            </div>
-          ) : (
-            displaySchemes.map((s) => (
-              <div key={s.id} className="glass p-4 active">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2">
-                    <FileText size={18} className="text-cropbright mt-0.5 shrink-0" />
-                    <div>
-                      <h3 className="font-semibold leading-tight">{s.name[lang]}</h3>
-                      <p className="text-xs text-[var(--text-dim)] mt-0.5">{s.benefit[lang]}</p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full border text-cropbright border-crop/40 bg-crop/10 glow-green flex items-center gap-1">
-                    <CheckCircle2 size={13} />
-                    {t('eligible', lang)}
-                  </span>
-                </div>
-
-                <button onClick={() => setOpen(open === s.id ? null : s.id)}
-                  className="tap !min-h-0 mt-3 w-full flex items-center justify-between text-sm text-cropbright">
-                  <span>{lang === 'hi' ? 'विवरण देखें' : 'View checklist'}</span>
-                  <ChevronDown size={18} className={`transition ${open === s.id ? 'rotate-180' : ''}`} />
-                </button>
-
-                <AnimatePresence>
-                  {open === s.id && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden">
-                      <div className="pt-3 space-y-3 text-sm">
-                        <Block icon={FileText} title={lang === 'hi' ? 'पात्रता नियम व दस्तावेज' : 'Eligibility & Documents'} items={s.documents[lang]} />
-                        <Block icon={ListChecks} title={t('steps', lang)} items={s.steps[lang]} />
-                        <div className="flex items-center gap-2 text-xs text-lime"><CalendarClock size={14} /> {t('deadline', lang)}: {s.deadline[lang]}</div>
-                        
-                        {s.link ? (
-                          <a 
-                            href={s.link} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="tap w-full bg-crop text-ink rounded-xl font-semibold flex items-center justify-center gap-2 py-3 text-center no-underline text-sm"
-                          >
-                            <ExternalLink size={18} /> {lang === 'hi' ? 'आधिकारिक साइट पर जाएं' : 'Visit Official Portal'}
-                          </a>
-                        ) : (
-                          <button className="tap w-full bg-crop text-ink rounded-xl font-semibold flex items-center justify-center gap-2 py-3">
-                            <FileDown size={18} /> {t('downloadChecklist', lang)}
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+      <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:space-y-0">
+        {/* Left Column: Search Form */}
+        <div className="lg:col-span-4">
+          <div className="glass p-4 space-y-4 sticky top-24">
+            <div>
+              <label className="text-xs text-[var(--text-dim)]">{t('state', lang)}</label>
+              <div className="relative">
+                <select value={state} onChange={(e) => setState(e.target.value)}
+                  className="tap w-full mt-1 bg-panel border border-crop/20 rounded-xl px-3 text-sm focus:border-crop outline-none appearance-none pr-8">
+                  {indianStates.map((s) => <option key={s} className="bg-panel">{s}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)] pointer-events-none" />
               </div>
-            ))
+            </div>
+
+            <div>
+              <label className="text-xs text-[var(--text-dim)]">{t('cropType', lang)}</label>
+              <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-hide">
+                {crops.map((c) => (
+                  <button key={c.id} onClick={() => setCrop(c.id)}
+                    className={`tap !min-h-0 shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                      crop === c.id ? 'bg-crop text-ink border-crop' : 'border-white/10 text-[var(--text-dim)]'}`}>
+                    {c.icon} {c.label[lang]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="tap w-full bg-crop text-ink rounded-xl font-semibold py-3 flex items-center justify-center gap-2 glow-green disabled:opacity-50"
+            >
+              {loading ? (
+                <><Loader2 size={16} className="animate-spin" /> {lang === 'hi' ? 'खोज रहे हैं...' : 'Searching...'}</>
+              ) : (
+                <>{lang === 'hi' ? 'योजनाएँ खोजें' : 'Search Schemes'}</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Loading, Error & Results */}
+        <div className="lg:col-span-8 mt-4 lg:mt-0">
+          {/* Loading state */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Loader2 size={28} className="animate-spin text-lime" />
+              <p className="text-sm text-[var(--text-dim)]">
+                {lang === 'hi' ? 'Tavily से योजनाएँ खोज रहे हैं...' : 'Searching schemes via Tavily AI...'}
+              </p>
+            </div>
+          )}
+
+          {/* Error state */}
+          {error && !loading && (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+              <WifiOff size={28} className="text-red-400" />
+              <p className="text-sm text-red-400 font-semibold">{lang === 'hi' ? 'योजनाएँ लोड नहीं हो सकीं' : 'Failed to load schemes'}</p>
+              <p className="text-xs text-[var(--text-dim)] max-w-xs">{error}</p>
+            </div>
+          )}
+
+          {/* Scheme results */}
+          {!loading && !error && hasFetched && (
+            <div className="space-y-3">
+              <div className="text-lime flex items-center gap-1 bg-lime/10 px-2 py-1 rounded-full text-xs font-bold border border-lime/30 justify-center">
+                <Sparkles size={12} /> {lang === 'hi' ? `${displaySchemes.length} योजनाएँ Tavily से मिलीं` : `${displaySchemes.length} schemes found via Tavily AI`}
+              </div>
+
+              {displaySchemes.length === 0 ? (
+                <div className="glass p-4 text-center text-xs text-[var(--text-dim)]">
+                  {lang === 'hi' ? 'कोई योजना नहीं मिली।' : 'No schemes found.'}
+                </div>
+              ) : (
+                displaySchemes.map((s) => (
+                  <div key={s.id} className="glass p-4 active">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <FileText size={18} className="text-cropbright mt-0.5 shrink-0" />
+                        <div>
+                          <h3 className="font-semibold leading-tight">{s.name[lang]}</h3>
+                          <p className="text-xs text-[var(--text-dim)] mt-0.5">{s.benefit[lang]}</p>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full border text-cropbright border-crop/40 bg-crop/10 glow-green flex items-center gap-1">
+                        <CheckCircle2 size={13} />
+                        {t('eligible', lang)}
+                      </span>
+                    </div>
+
+                    <button onClick={() => setOpen(open === s.id ? null : s.id)}
+                      className="tap !min-h-0 mt-3 w-full flex items-center justify-between text-sm text-cropbright">
+                      <span>{lang === 'hi' ? 'विवरण देखें' : 'View checklist'}</span>
+                      <ChevronDown size={18} className={`transition ${open === s.id ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {open === s.id && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden">
+                          <div className="pt-3 space-y-3 text-sm">
+                            <Block icon={FileText} title={lang === 'hi' ? 'पात्रता नियम व दस्तावेज' : 'Eligibility & Documents'} items={s.documents[lang]} />
+                            <Block icon={ListChecks} title={t('steps', lang)} items={s.steps[lang]} />
+                            <div className="flex items-center gap-2 text-xs text-lime"><CalendarClock size={14} /> {t('deadline', lang)}: {s.deadline[lang]}</div>
+                            
+                            {s.source_url ? (
+                              <a 
+                                href={s.source_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="tap w-full bg-crop text-ink rounded-xl font-semibold flex items-center justify-center gap-2 py-3 text-center no-underline text-sm mt-2"
+                              >
+                                <ExternalLink size={18} />
+                                {lang === 'hi' ? 'आधिकारिक साइट पर जाएं' : 'Visit Official Portal'}
+                                {s.confidence === 'high' && <span className="text-[10px] opacity-70">✓ Verified</span>}
+                              </a>
+                            ) : (
+                              <a 
+                                href={`https://www.google.com/search?q=${encodeURIComponent(s.name[lang] + ' India apply online official')}`}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="tap w-full bg-white/10 text-white rounded-xl font-semibold flex items-center justify-center gap-2 py-3 text-center no-underline text-sm border border-white/10 hover:border-white/30 transition-colors mt-2"
+                              >
+                                <ExternalLink size={18} /> {lang === 'hi' ? `"${s.name[lang]}" गूगल पर खोजें` : `Search "${s.name[lang]}" on Google`}
+                              </a>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ))
+              )}
+            </div>
           )}
         </div>
-      )}
+      </div>
     </Screen>
   )
 }

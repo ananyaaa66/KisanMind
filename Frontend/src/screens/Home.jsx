@@ -18,8 +18,16 @@ const tiles = [
 ]
 
 export default function Home() {
-  const { lang, setReportOpen, advisoryData, setAdvisoryData, reportsHistory } = useApp()
+  const { lang, setReportOpen, advisoryData, setAdvisoryData, reportsHistory, profile, preferences } = useApp()
   const navigate = useNavigate()
+
+  const formatTemp = (celsius) => {
+    if (celsius === null || celsius === undefined) return '—'
+    if (preferences?.temperatureUnit === 'fahrenheit') {
+      return Math.round(celsius * 1.8 + 32) + '°F'
+    }
+    return Math.round(celsius) + '°C'
+  }
 
   // Live weather state
   const [liveWeather, setLiveWeather] = useState(null)
@@ -30,7 +38,7 @@ export default function Home() {
     async function loadWeather() {
       try {
         // Use farmer's saved location instead of hardcoded Delhi
-        const savedLoc = localStorage.getItem('kisanmind_farmer_location') || 'Delhi'
+        const savedLoc = profile?.location || 'Delhi'
         const data = await fetchWeather(savedLoc)
         if (!cancelled) setLiveWeather(data)
       } catch { /* silently fail — show fallback */ }
@@ -38,11 +46,11 @@ export default function Home() {
     }
     loadWeather()
     return () => { cancelled = true }
-  }, [])
+  }, [profile?.location])
 
-  // Farmer name from localStorage or default
-  const farmerName = localStorage.getItem('kisanmind_farmer_name') || (lang === 'hi' ? 'किसान' : 'Farmer')
-  const farmerLocation = localStorage.getItem('kisanmind_farmer_location') || (lang === 'hi' ? 'दिल्ली' : 'Delhi')
+  // Farmer name from profile or default
+  const farmerName = profile?.name || (lang === 'hi' ? 'किसान' : 'Farmer')
+  const farmerLocation = profile?.location || (lang === 'hi' ? 'दिल्ली' : 'Delhi')
 
   const userMenuItems = [
     { to: '/profile', icon: User, label: { en: 'My Profile', hi: 'मेरा प्रोफाइल' } },
@@ -59,6 +67,22 @@ export default function Home() {
     ? liveWeather.today.rain_probability_percent
     : null
 
+  // Strip markdown syntax for plain-text preview
+  const stripMarkdown = (md) => {
+    if (!md) return ''
+    return md
+      .replace(/^#{1,3}\s+/gm, '')      // ## headings
+      .replace(/\*\*(.*?)\*\*/g, '$1')   // **bold**
+      .replace(/\*(.*?)\*/g, '$1')       // *italic*
+      .replace(/^[-*]\s+/gm, '• ')      // - bullet → •
+      .replace(/^>\s+/gm, '')           // > blockquote
+      .replace(/---/g, '')              // horizontal rules
+      .replace(/\n{2,}/g, ' ')          // collapse blank lines
+      .replace(/\n/g, ' ')             // collapse remaining newlines
+      .replace(/\s{2,}/g, ' ')          // collapse whitespace
+      .trim()
+  }
+
   // Resolve dynamic advisory
   const activeAdvisory = advisoryData?.final_report
     ? {
@@ -67,8 +91,8 @@ export default function Home() {
           hi: `${advisoryData.crop_type === 'tomato' ? 'टमाटर' : 'फ़सल'} के लिए कृषि सलाह` 
         },
         body: {
-          en: advisoryData.final_report.slice(0, 180) + '...',
-          hi: advisoryData.final_report.slice(0, 180) + '...'
+          en: stripMarkdown(advisoryData.final_report).slice(0, 200) + '...',
+          hi: stripMarkdown(advisoryData.final_report).slice(0, 200) + '...'
         }
       }
     : {
@@ -93,119 +117,125 @@ export default function Home() {
   const displayReports = reportsHistory.slice(0, 3)
 
   return (
-    <div className="px-4 pt-4 pb-32 space-y-4 animate-sprout">
-      {/* Greeting card */}
-      <div className="glass p-4 relative overflow-hidden">
-        <span className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-crop to-lime" />
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <p className="text-[var(--text-dim)] text-sm">{t('greeting', lang)} 🙏</p>
-            <h2 className="text-2xl font-bold mt-0.5">{farmerName}</h2>
-            <p className="text-sm text-[var(--text-dim)] mt-1">{farmerLocation} · {today}</p>
-          </div>
-          <div className="flex gap-1">
-            {userMenuItems.map(({ to, icon: Icon, label }) => (
-              <button
-                key={to}
-                onClick={() => navigate(to)}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                title={label[lang]}
-              >
-                <Icon size={18} className="text-cropbright" />
-              </button>
-            ))}
-          </div>
-        </div>
-        <GrowthLine className="mt-3 opacity-70" />
-      </div>
-
-      {/* Weather strip — LIVE */}
-      <div className="grid grid-cols-1 gap-3">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="glass p-3 flex items-center justify-between"
-        >
-          <div className="flex items-center gap-2">
-            <CloudRain className="text-lime" size={20} />
-            <div>
-              {weatherLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 size={14} className="animate-spin text-lime" />
-                  <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम लोड हो रहा...' : 'Loading weather...'}</p>
-                </div>
-              ) : currentTemp !== null ? (
-                <>
-                  <p className="num text-lg font-bold">{currentTemp}°C</p>
-                  <p className="text-xs text-[var(--text-dim)]">{currentRain}% {lang === 'hi' ? 'वर्षा' : 'Rain'} · {liveWeather?.today?.description}</p>
-                </>
-              ) : (
-                <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम उपलब्ध नहीं' : 'Weather unavailable'}</p>
-              )}
+    <div className="px-4 pt-4 pb-32 lg:pb-8 lg:px-0 space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 animate-sprout">
+      {/* Left Column: Greeting, Weather, Advisory */}
+      <div className="lg:col-span-7 space-y-4">
+        {/* Greeting card */}
+        <div className="glass p-4 relative overflow-hidden">
+          <span className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-crop to-lime" />
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex-1">
+              <p className="text-[var(--text-dim)] text-sm">{t('greeting', lang)} 🙏</p>
+              <h2 className="text-2xl font-bold mt-0.5">{farmerName}</h2>
+              <p className="text-sm text-[var(--text-dim)] mt-1">{farmerLocation} · {today}</p>
+            </div>
+            <div className="flex gap-1 lg:hidden">
+              {userMenuItems.map(({ to, icon: Icon, label }) => (
+                <button
+                  key={to}
+                  onClick={() => navigate(to)}
+                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                  title={label[lang]}
+                >
+                  <Icon size={18} className="text-cropbright" />
+                </button>
+              ))}
             </div>
           </div>
-          {liveWeather && (
-            <span className="text-[10px] text-lime font-bold bg-lime/10 px-2 py-0.5 rounded-full border border-lime/30">LIVE</span>
-          )}
-        </motion.div>
+          <GrowthLine className="mt-3 opacity-70" />
+        </div>
+
+        {/* Weather strip — LIVE */}
+        <div className="grid grid-cols-1 gap-3">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="glass p-3 flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <CloudRain className="text-lime" size={20} />
+              <div>
+                {weatherLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin text-lime" />
+                    <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम लोड हो रहा...' : 'Loading weather...'}</p>
+                  </div>
+                ) : currentTemp !== null ? (
+                  <>
+                    <p className="num text-lg font-bold">{formatTemp(currentTemp)}</p>
+                    <p className="text-xs text-[var(--text-dim)]">{currentRain}% {lang === 'hi' ? 'वर्षा' : 'Rain'} · {liveWeather?.today?.description}</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-[var(--text-dim)]">{lang === 'hi' ? 'मौसम उपलब्ध नहीं' : 'Weather unavailable'}</p>
+                )}
+              </div>
+            </div>
+            {liveWeather && (
+              <span className="text-[10px] text-lime font-bold bg-lime/10 px-2 py-0.5 rounded-full border border-lime/30">LIVE</span>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Today's advisory hero */}
+        <div className="glass active p-4 relative overflow-hidden cursor-pointer" onClick={() => advisoryData && setReportOpen(true)}>
+          <span className="absolute left-0 top-0 h-full w-1.5 bg-lime glow-green" />
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider text-lime font-semibold">{t('todayAdvisory', lang)}</p>
+            <SpeakButton text={activeAdvisory.body[lang]} label="" />
+          </div>
+          <h3 className="font-bold text-lg mt-1.5">{activeAdvisory.title[lang]}</h3>
+          <p className="text-sm text-[var(--text-dim)] mt-1">{activeAdvisory.body[lang]}</p>
+        </div>
       </div>
 
-      {/* Today's advisory hero */}
-      <div className="glass active p-4 relative overflow-hidden cursor-pointer" onClick={() => advisoryData && setReportOpen(true)}>
-        <span className="absolute left-0 top-0 h-full w-1.5 bg-lime glow-green" />
-        <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wider text-lime font-semibold">{t('todayAdvisory', lang)}</p>
-          <SpeakButton text={activeAdvisory.body[lang]} label="" />
-        </div>
-        <h3 className="font-bold text-lg mt-1.5">{activeAdvisory.title[lang]}</h3>
-        <p className="text-sm text-[var(--text-dim)] mt-1">{activeAdvisory.body[lang]}</p>
-      </div>
-
-      {/* Quick action tiles */}
-      <div>
-        <p className="text-sm font-semibold mb-2">{t('quickActions', lang)}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {tiles.map(({ to, icon: Icon, label }) => (
-            <motion.div key={to} whileTap={{ scale: 0.96 }}>
-              <Link to={to} className="glass p-4 flex flex-col gap-3 active:border-crop/60 transition">
-                <span className="grid place-items-center w-11 h-11 rounded-xl bg-crop/15 text-cropbright">
-                  <Icon size={22} />
-                </span>
-                <span className="font-semibold text-sm">{label[lang]}</span>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent reports — live only */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold">{t('recentReports', lang)}</p>
-        </div>
-        {displayReports.length > 0 ? (
-          <div className="space-y-2">
-            {displayReports.map((r) => (
-              <button 
-                key={r.id} 
-                onClick={() => handleViewHistoryReport(r)}
-                className="glass w-full p-3 flex items-center gap-3 text-left"
-              >
-                <FileText size={18} className="text-cropbright shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{r.title[lang]}</p>
-                  <p className="text-xs text-[var(--text-dim)]">{r.date}</p>
-                </div>
-                <ChevronRight size={18} className="text-[var(--text-dim)]" />
-              </button>
+      {/* Right Column: Quick Action Tiles, Recent Reports */}
+      <div className="lg:col-span-5 space-y-4">
+        {/* Quick action tiles */}
+        <div>
+          <p className="text-sm font-semibold mb-2">{t('quickActions', lang)}</p>
+          <div className="grid grid-cols-2 gap-3">
+            {tiles.map(({ to, icon: Icon, label }) => (
+              <motion.div key={to} whileTap={{ scale: 0.96 }}>
+                <Link to={to} className="glass p-4 flex flex-col gap-3 active:border-crop/60 transition h-full justify-between">
+                  <span className="grid place-items-center w-11 h-11 rounded-xl bg-crop/15 text-cropbright">
+                    <Icon size={22} />
+                  </span>
+                  <span className="font-semibold text-sm">{label[lang]}</span>
+                </Link>
+              </motion.div>
             ))}
           </div>
-        ) : (
-          <div className="glass p-4 text-center text-xs text-[var(--text-dim)]">
-            {lang === 'hi' ? 'अभी तक कोई रिपोर्ट नहीं। "रोग जाँच" से शुरू करें।' : 'No reports yet. Start with a Disease Scan to generate your first advisory.'}
+        </div>
+
+        {/* Recent reports — live only */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold">{t('recentReports', lang)}</p>
           </div>
-        )}
+          {displayReports.length > 0 ? (
+            <div className="space-y-2">
+              {displayReports.map((r) => (
+                <button 
+                  key={r.id} 
+                  onClick={() => handleViewHistoryReport(r)}
+                  className="glass w-full p-3 flex items-center gap-3 text-left"
+                >
+                  <FileText size={18} className="text-cropbright shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{r.title[lang]}</p>
+                    <p className="text-xs text-[var(--text-dim)]">{r.date}</p>
+                  </div>
+                  <ChevronRight size={18} className="text-[var(--text-dim)]" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="glass p-4 text-center text-xs text-[var(--text-dim)]">
+              {lang === 'hi' ? 'अभी तक कोई रिपोर्ट नहीं। "रोग जाँच" से शुरू करें।' : 'No reports yet. Start with a Disease Scan to generate your first advisory.'}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -29,21 +29,28 @@ def get_genai_client():
     return _client
 
 
-DISEASE_PROMPT = """You are an expert agricultural plant pathologist AI for Indian farming.
+def _build_disease_prompt(crop_type: str, location: str, query: str) -> str:
+    """Build a context-aware disease detection prompt."""
+    return f"""You are an expert agricultural plant pathologist AI for Indian farming.
+
+The farmer is growing **{crop_type}** in **{location}**.
+Farmer's question: "{query}"
+
 Analyze the provided crop image carefully and return a JSON object with exactly these fields:
 
-{
+{{
   "disease_name": "exact name of the disease or 'Healthy' if no disease",
   "confidence_score": <number 0-100>,
   "affected_area_percent": <number 0-100, estimated % of visible plant affected>,
   "severity": "low" | "medium" | "high",
   "treatment": "specific treatment with pesticide name and dosage in ml per acre",
   "image_analysis_summary": "2-3 sentence description of what you see in the image"
-}
+}}
 
 Rules:
 - Be specific about pesticide names commonly available in India (e.g., Mancozeb, Carbendazim, Imidacloprid)
 - Dosage must be in ml per acre or grams per acre
+- Consider diseases that are common for {crop_type} in {location} when making your diagnosis
 - If the image is unclear or not a crop, set disease_name to "Unable to determine" and confidence to 0
 - Return ONLY the JSON, no markdown fences, no extra text
 """
@@ -57,6 +64,9 @@ async def run_disease_agent(state: KisanMindState) -> KisanMindState:
     """
     start = time.time()
 
+    crop_type = state.get("crop_type", "crop")
+    location = state.get("location", "India")
+    query = state.get("query", "")
     image_b64 = state.get("image_base64")
     if not image_b64:
         elapsed = time.time() - start
@@ -68,20 +78,40 @@ async def run_disease_agent(state: KisanMindState) -> KisanMindState:
         }
 
     try:
+        # Build context-aware prompt
+        prompt = _build_disease_prompt(crop_type, location, query)
+
         # Build multimodal content for Gemini Vision (new SDK)
         image_part = genai.types.Part.from_bytes(
             data=__import__("base64").b64decode(image_b64),
             mime_type="image/jpeg",
         )
 
+        # Image MUST come first for Gemini Vision to process it correctly
         response = get_genai_client().models.generate_content(
             model=os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash"),
-            contents=[DISEASE_PROMPT, image_part],
+            contents=[image_part, prompt],
             config=genai.types.GenerateContentConfig(
                 temperature=0.2,
                 max_output_tokens=1024,
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "disease_name": {"type": "string"},
+                        "confidence_score": {"type": "number"},
+                        "affected_area_percent": {"type": "number"},
+                        "severity": {"type": "string", "enum": ["low", "medium", "high"]},
+                        "treatment": {"type": "string"},
+                        "image_analysis_summary": {"type": "string"},
+                    },
+                    "required": ["disease_name", "confidence_score", "affected_area_percent", "severity", "treatment", "image_analysis_summary"],
+                },
             ),
         )
+
+        print(f"🔬 Disease agent raw response length: {len(response.text)} chars")
 
         raw_text = response.text.strip()
 
@@ -92,7 +122,18 @@ async def run_disease_agent(state: KisanMindState) -> KisanMindState:
             raw_text = raw_text.rsplit("```", 1)[0]
         raw_text = raw_text.strip()
 
-        parsed = json.loads(raw_text)
+        # Robust JSON extraction — find the first { ... } block
+        parsed = None
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            import re
+            match = re.search(r'\{[\s\S]*\}', raw_text)
+            if match:
+                parsed = json.loads(match.group())
+            else:
+                raise ValueError(f"No valid JSON found in response: {raw_text[:200]}")
+
         result = DiseaseResult(**parsed)
 
         elapsed = time.time() - start

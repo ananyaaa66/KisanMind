@@ -11,7 +11,7 @@ from __future__ import annotations
 import operator
 import uuid
 from datetime import datetime
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -49,7 +49,8 @@ class SchemeInfo(BaseModel):
     eligibility: str = ""
     application_steps: str = ""
     deadline: Optional[str] = None
-    link: Optional[str] = None
+    source_url: Optional[str] = None
+    confidence: Literal["high", "medium", "low"] = "low"
 
 
 class SchemeResult(BaseModel):

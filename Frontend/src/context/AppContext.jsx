@@ -3,15 +3,155 @@ import { runAdvisory, getHistory, downloadAdvisoryPdf } from '../utils/api.js'
 
 const AppContext = createContext(null)
 
+const LS_REPORTS_KEY = 'kisanmind_reports'
+const LS_ADVISORY_KEY = 'kisanmind_last_advisory'
+
+/**
+ * Load saved reports from localStorage.
+ */
+function loadReportsFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_REPORTS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Save reports array to localStorage.
+ */
+function saveReportsToStorage(reports) {
+  try {
+    localStorage.setItem(LS_REPORTS_KEY, JSON.stringify(reports))
+  } catch (e) {
+    console.warn('Failed to save reports to localStorage:', e)
+  }
+}
+
+/**
+ * Load last advisory data from localStorage (for home page hero card).
+ */
+function loadAdvisoryFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_ADVISORY_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Save advisory data to localStorage.
+ */
+function saveAdvisoryToStorage(data) {
+  try {
+    if (data) {
+      localStorage.setItem(LS_ADVISORY_KEY, JSON.stringify(data))
+    }
+  } catch (e) {
+    console.warn('Failed to save advisory to localStorage:', e)
+  }
+}
+
+const defaultProfile = {
+  name: 'Ananya KhetiWadi',
+  phone: '',
+  email: '',
+  location: '',
+  totalLand: 2.5,
+  crops: [
+    { name: 'tomato', area: 1.0, soilType: 'Black soil' },
+    { name: 'onion', area: 1.5, soilType: 'Loamy soil' },
+  ],
+}
+
 export function AppProvider({ children }) {
-  const [lang, setLang] = useState('en') // 'en' | 'hi' only
+  const [lang, setLangState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kisanmind_lang')
+      return (saved === 'hi' || saved === 'en') ? saved : 'en'
+    } catch {
+      return 'en'
+    }
+  })
+
+  const setLang = useCallback((valOrFn) => {
+    setLangState((prev) => {
+      const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn
+      try {
+        localStorage.setItem('kisanmind_lang', next)
+      } catch (e) {
+        console.warn('Failed to save lang to localStorage:', e)
+      }
+      return next
+    })
+  }, [])
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   
-  // New API-driven state variables
-  const [advisoryData, setAdvisoryData] = useState(null)
+  // Profile global state
+  const [profile, setProfileState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kisanmind_profile')
+      if (saved) return JSON.parse(saved)
+      
+      const legacyName = localStorage.getItem('kisanmind_farmer_name') || ''
+      const legacyLoc = localStorage.getItem('kisanmind_farmer_location') || ''
+      return {
+        ...defaultProfile,
+        name: legacyName || 'Ananya KhetiWadi',
+        location: legacyLoc,
+      }
+    } catch {
+      return defaultProfile
+    }
+  })
+
+  const updateProfile = useCallback((newProfile) => {
+    setProfileState(newProfile)
+    try {
+      localStorage.setItem('kisanmind_profile', JSON.stringify(newProfile))
+      if (newProfile.name) {
+        localStorage.setItem('kisanmind_farmer_name', newProfile.name)
+      }
+      if (newProfile.location) {
+        localStorage.setItem('kisanmind_farmer_location', newProfile.location)
+      }
+    } catch (e) {
+      console.warn('Failed to save profile to localStorage:', e)
+    }
+  }, [])
+
+  // Preferences global state
+  const [preferences, setPreferencesState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kisanmind_preferences')
+      return saved ? JSON.parse(saved) : {
+        temperatureUnit: 'celsius',
+        currency: 'INR',
+      }
+    } catch {
+      return {
+        temperatureUnit: 'celsius',
+        currency: 'INR',
+      }
+    }
+  })
+
+  const updatePreferences = useCallback((newPrefs) => {
+    setPreferencesState(newPrefs)
+    try {
+      localStorage.setItem('kisanmind_preferences', JSON.stringify(newPrefs))
+    } catch (e) {
+      console.warn('Failed to save preferences to localStorage:', e)
+    }
+  }, [])
+  
+  // Load persisted state on mount
+  const [advisoryData, setAdvisoryData] = useState(() => loadAdvisoryFromStorage())
   const [loading, setLoading] = useState(false)
-  const [reportsHistory, setReportsHistory] = useState([])
+  const [reportsHistory, setReportsHistory] = useState(() => loadReportsFromStorage())
   const [sessionId] = useState(() => {
     let id = localStorage.getItem('kisanmind_session_id')
     if (!id) {
@@ -21,7 +161,7 @@ export function AppProvider({ children }) {
     return id
   })
 
-  const toggleLang = useCallback(() => setLang((l) => (l === 'en' ? 'hi' : 'en')), [])
+  const toggleLang = useCallback(() => setLang((l) => (l === 'en' ? 'hi' : 'en')), [setLang])
 
   // Web Speech API TTS — EN + HI only
   const speak = useCallback((text) => {
@@ -35,36 +175,52 @@ export function AppProvider({ children }) {
     } catch (e) { /* TTS unavailable in this environment */ }
   }, [lang])
 
-  // Fetch reports history on load
-  const loadReportsHistory = useCallback(async () => {
-    try {
-      const data = await getHistory(sessionId)
-      if (data && data.success) {
-        // Map backend ChromaDB items to match UI list schema
-        const mapped = data.reports.map((r) => {
-          const meta = r.metadata || {}
-          return {
-            id: r.id,
-            title: {
-              en: `${meta.crop || 'Crop'} Health Diagnosis`,
-              hi: `${meta.crop === 'tomato' ? 'टमाटर' : meta.crop === 'onion' ? 'प्याज़' : 'फ़सल'} स्वास्थ्य जाँच`
-            },
-            date: meta.saved_at ? new Date(meta.saved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent',
-            reportText: r.document,
-            crop: meta.crop,
-            location: meta.location
-          }
-        })
-        setReportsHistory(mapped)
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error)
-    }
-  }, [sessionId])
-
+  // Persist advisoryData whenever it changes
   useEffect(() => {
-    loadReportsHistory()
-  }, [loadReportsHistory])
+    if (advisoryData) {
+      saveAdvisoryToStorage(advisoryData)
+    }
+  }, [advisoryData])
+
+  // Try to merge ChromaDB history on mount (fallback, non-blocking)
+  useEffect(() => {
+    async function mergeRemoteHistory() {
+      try {
+        const data = await getHistory(sessionId)
+        if (data && data.success && data.reports?.length) {
+          const localIds = new Set(reportsHistory.map(r => r.id))
+          const newRemote = data.reports
+            .filter(r => !localIds.has(r.id))
+            .map((r) => {
+              const meta = r.metadata || {}
+              return {
+                id: r.id,
+                title: {
+                  en: `${meta.crop || 'Crop'} Health Diagnosis`,
+                  hi: `${meta.crop === 'tomato' ? 'टमाटर' : meta.crop === 'onion' ? 'प्याज़' : 'फ़सल'} स्वास्थ्य जाँच`
+                },
+                date: meta.saved_at ? new Date(meta.saved_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent',
+                reportText: r.document,
+                crop: meta.crop,
+                location: meta.location,
+                timestamp: meta.saved_at || new Date().toISOString()
+              }
+            })
+          if (newRemote.length) {
+            setReportsHistory(prev => {
+              const merged = [...newRemote, ...prev]
+              saveReportsToStorage(merged)
+              return merged
+            })
+          }
+        }
+      } catch (error) {
+        console.warn('ChromaDB history sync skipped:', error.message)
+      }
+    }
+    mergeRemoteHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
 
   // Run the multi-agent pipeline
   const runAdvisoryPipeline = useCallback(async (cropType, location, query, imageFile = null) => {
@@ -73,8 +229,29 @@ export function AppProvider({ children }) {
       const data = await runAdvisory(cropType, location, query, imageFile)
       if (data && data.success) {
         setAdvisoryData(data)
-        // Refresh local history
-        await loadReportsHistory()
+
+        // Create a report entry and persist to localStorage
+        const newReport = {
+          id: data.session_id || ('report_' + Date.now()),
+          title: {
+            en: `${cropType || 'Crop'} Health Diagnosis`,
+            hi: `${cropType === 'tomato' ? 'टमाटर' : cropType === 'onion' ? 'प्याज़' : 'फ़सल'} स्वास्थ्य जाँच`
+          },
+          date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+          reportText: data.final_report,
+          crop: cropType,
+          location: location,
+          timestamp: new Date().toISOString()
+        }
+
+        setReportsHistory(prev => {
+          // Avoid duplicates
+          const filtered = prev.filter(r => r.id !== newReport.id)
+          const updated = [newReport, ...filtered]
+          saveReportsToStorage(updated)
+          return updated
+        })
+
         setLoading(false)
         return data
       } else {
@@ -85,7 +262,7 @@ export function AppProvider({ children }) {
       console.error('Error running advisory pipeline:', error)
       throw error
     }
-  }, [loadReportsHistory])
+  }, [])
 
   // Export current advisory as PDF
   const exportPdf = useCallback(async () => {
@@ -97,11 +274,30 @@ export function AppProvider({ children }) {
     }
   }, [advisoryData, sessionId])
 
+  // Delete a single report
+  const deleteReport = useCallback((reportId) => {
+    setReportsHistory(prev => {
+      const updated = prev.filter(r => r.id !== reportId)
+      saveReportsToStorage(updated)
+      return updated
+    })
+  }, [])
+
+  // Clear all reports from localStorage
+  const clearAllReports = useCallback(() => {
+    setReportsHistory([])
+    setAdvisoryData(null)
+    localStorage.removeItem(LS_REPORTS_KEY)
+    localStorage.removeItem(LS_ADVISORY_KEY)
+  }, [])
+
   const value = {
     lang, setLang, toggleLang,
     voiceOpen, setVoiceOpen,
     reportOpen, setReportOpen,
     speak,
+    profile, updateProfile,
+    preferences, updatePreferences,
     
     // Live advisory pipeline integration
     advisoryData, setAdvisoryData,
@@ -109,7 +305,9 @@ export function AppProvider({ children }) {
     reportsHistory,
     sessionId,
     runAdvisoryPipeline,
-    exportPdf
+    exportPdf,
+    deleteReport,
+    clearAllReports
   }
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
