@@ -154,6 +154,23 @@ async def download_advisory_pdf(
 # GET /history/{session_id}
 # ──────────────────────────────────────────────
 
+@app.get("/history/all")
+async def get_all_session_history():
+    """
+    Retrieve all past advisory reports from ChromaDB.
+    """
+    from memory.long_term import get_all_history
+    try:
+        history = get_all_history(limit=50)
+        return {
+            "success": True,
+            "total_reports": len(history),
+            "reports": history,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"History retrieval failed: {str(e)}")
+
+
 @app.get("/history/{session_id}")
 async def get_session_history(session_id: str):
     """
