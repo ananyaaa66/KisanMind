@@ -38,17 +38,6 @@ export async function getHistory(sessionId) {
 }
 
 /**
- * Fetch all past advisory reports.
- */
-export async function getAllHistory() {
-  const response = await fetch(`${API_BASE_URL}/history/all`);
-  if (!response.ok) {
-    throw new Error('Failed to retrieve all history');
-  }
-  return response.json();
-}
-
-/**
  * Download a PDF copy of the advisory report.
  */
 export async function downloadAdvisoryPdf(sessionId, reportMarkdown) {
@@ -87,26 +76,7 @@ export async function fetchWeather(location = 'Delhi') {
     const errData = await response.json().catch(() => ({ detail: 'Weather fetch failed' }));
     throw new Error(errData.detail || 'Failed to fetch weather');
   }
-  const data = await response.json();
-
-  // Normalize backend field names to what the frontend components expect
-  function normalizeDay(d) {
-    if (!d) return d;
-    return {
-      ...d,
-      temp: d.temp_max_c ?? d.temp,
-      humidity: d.humidity_percent ?? d.humidity,
-      wind_speed: d.wind_speed_kmh ?? d.wind_speed,
-      rain_prob: d.rain_probability_percent ?? d.rain_prob,
-      condition: d.description ?? d.condition,
-    };
-  }
-
-  return {
-    ...data,
-    today: normalizeDay(data.today),
-    forecast_3d: (data.forecast_3d || []).map(normalizeDay),
-  };
+  return response.json();
 }
 
 /**
@@ -123,17 +93,7 @@ export async function fetchSchemes(crop = 'wheat', location = 'Maharashtra') {
     const errData = await response.json().catch(() => ({ detail: 'Scheme search failed' }));
     throw new Error(errData.detail || 'Failed to fetch schemes');
   }
-  const data = await response.json();
-
-  // Normalize backend field names (source_url → link) for frontend
-  if (data.scheme_result && data.scheme_result.eligible_schemes) {
-    data.scheme_result.eligible_schemes = data.scheme_result.eligible_schemes.map(s => ({
-      ...s,
-      link: s.source_url || s.link || null,
-    }));
-  }
-
-  return data;
+  return response.json();
 }
 
 /**

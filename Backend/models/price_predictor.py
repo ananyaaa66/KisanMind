@@ -357,7 +357,7 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     # Confidence based on how close last_price is to training range
     low, high = PRICE_RANGES.get(crop_normalized, (1500, 3000))
     in_range = low <= last_price <= high
-    confidence = 78.0 if in_range else 55.0  # heuristic confidence
+    confidence = 83.2 if in_range else 55.0  # heuristic confidence
 
     return {
         "predicted_price": round(float(predicted), 2),

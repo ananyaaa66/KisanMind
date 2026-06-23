@@ -83,6 +83,26 @@ def get_history(session_id: str, limit: int = 20) -> list[dict]:
     return history
 
 
+def get_all_history(limit: int = 50) -> list[dict]:
+    """
+    Retrieve all past advisory reports from all sessions.
+    """
+    results = _collection.get(limit=limit)
+    if not results or not results["documents"]:
+        return []
+
+    history = []
+    for i, doc in enumerate(results["documents"]):
+        history.append({
+            "id": results["ids"][i],
+            "document": doc,
+            "metadata": results["metadatas"][i] if results["metadatas"] else {},
+        })
+    # Sort by saved_at descending
+    history.sort(key=lambda x: x["metadata"].get("saved_at", ""), reverse=True)
+    return history
+
+
 def search_similar(query: str, n_results: int = 5) -> list[dict]:
     """
     Semantic search across all stored advisory reports.
