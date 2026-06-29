@@ -82,6 +82,12 @@ export async function downloadAdvisoryPdf(sessionId, reportMarkdown) {
  * @returns {Promise<object>} { success, location, today, forecast_3d }
  */
 export async function fetchWeather(location = 'Delhi') {
+  const cacheKey = `weather_${location.toLowerCase()}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) {}
+  }
+
   const response = await fetch(`${API_BASE_URL}/weather?location=${encodeURIComponent(location)}`);
   if (!response.ok) {
     const errData = await response.json().catch(() => ({ detail: 'Weather fetch failed' }));
@@ -102,11 +108,13 @@ export async function fetchWeather(location = 'Delhi') {
     };
   }
 
-  return {
+  const result = {
     ...data,
     today: normalizeDay(data.today),
     forecast_3d: (data.forecast_3d || []).map(normalizeDay),
   };
+  sessionStorage.setItem(cacheKey, JSON.stringify(result));
+  return result;
 }
 
 /**
@@ -116,6 +124,12 @@ export async function fetchWeather(location = 'Delhi') {
  * @returns {Promise<object>} { success, scheme_result }
  */
 export async function fetchSchemes(crop = 'wheat', location = 'Maharashtra') {
+  const cacheKey = `schemes_${crop.toLowerCase()}_${location.toLowerCase()}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) {}
+  }
+
   const response = await fetch(
     `${API_BASE_URL}/schemes?crop=${encodeURIComponent(crop)}&location=${encodeURIComponent(location)}`
   );
@@ -133,6 +147,7 @@ export async function fetchSchemes(crop = 'wheat', location = 'Maharashtra') {
     }));
   }
 
+  sessionStorage.setItem(cacheKey, JSON.stringify(data));
   return data;
 }
 
