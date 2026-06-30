@@ -54,6 +54,15 @@ app.add_middleware(
 
 
 # ──────────────────────────────────────────────
+# Root endpoint for Uptime monitoring
+# ──────────────────────────────────────────────
+@app.get("/")
+@app.head("/")
+async def root():
+    return {"status": "ok", "message": "KisanMind API is running"}
+
+
+# ──────────────────────────────────────────────
 # POST /advisory
 # ──────────────────────────────────────────────
 
