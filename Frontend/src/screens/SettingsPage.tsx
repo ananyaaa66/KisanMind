@@ -26,7 +26,7 @@ export default function SettingsPage() {
     if (userRaw) {
       try {
         const user = JSON.parse(userRaw);
-        const API = import.meta.env.VITE_API_URL || "https://kisanmind-2vzy.onrender.com";
+        const API = import.meta.env.VITE_API_URL || "https://kisanmind-ls1d.onrender.com";
         const res = await fetch(`${API}/auth/update`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://kisanmind-2vzy.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://kisanmind-ls1d.onrender.com';
 
 /**
  * Execute the multi-agent agricultural advisory pipeline.

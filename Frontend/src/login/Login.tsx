@@ -31,7 +31,7 @@ export default function Login({ onLogin }: { onLogin?: () => void } = {}) {
   ]);
 
   useEffect(() => {
-    const API = import.meta.env.VITE_API_URL || "https://kisanmind-2vzy.onrender.com";
+    const API = import.meta.env.VITE_API_URL || "https://kisanmind-ls1d.onrender.com";
     fetch(`${API}/stats`)
       .then(res => res.json())
       .then(data => {
@@ -52,7 +52,7 @@ export default function Login({ onLogin }: { onLogin?: () => void } = {}) {
     setError("");
 
     try {
-      const API = import.meta.env.VITE_API_URL || "https://kisanmind-2vzy.onrender.com";
+      const API = import.meta.env.VITE_API_URL || "https://kisanmind-ls1d.onrender.com";
       let res: Response;
 
       if (mode === 'register') {
