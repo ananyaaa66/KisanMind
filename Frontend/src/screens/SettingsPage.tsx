@@ -18,8 +18,36 @@ export default function SettingsPage() {
     }).catch(console.error);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     saveProfile(profile);
+    
+    // Also save to Supabase so it's permanent
+    const userRaw = localStorage.getItem("kisanmind_user");
+    if (userRaw) {
+      try {
+        const user = JSON.parse(userRaw);
+        const API = import.meta.env.VITE_API_URL || "https://kisanmind-2vzy.onrender.com";
+        const res = await fetch(`${API}/auth/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: user.id,
+            name: profile.name,
+            city: profile.location,
+            state: profile.state,
+            land_owned: profile.landAcres
+          })
+        });
+        
+        const data = await res.json();
+        if (data.success && data.user) {
+          localStorage.setItem("kisanmind_user", JSON.stringify(data.user));
+        }
+      } catch (e) {
+        console.error("Failed to sync profile to cloud:", e);
+      }
+    }
+    
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

@@ -23,13 +23,26 @@ const DEFAULT_PROFILE: FarmerProfile = {
 };
 
 export function getProfile(): FarmerProfile {
+  let profile = { ...DEFAULT_PROFILE };
   try {
+    // 1. Try to load saved settings from settings key
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_PROFILE };
-    return { ...DEFAULT_PROFILE, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_PROFILE };
+    if (raw) {
+      profile = { ...profile, ...JSON.parse(raw) };
+    }
+    
+    // 2. Override with the logged-in user's data (so it never forgets name/location)
+    const userRaw = localStorage.getItem("kisanmind_user");
+    if (userRaw) {
+      const user = JSON.parse(userRaw);
+      if (user.name) profile.name = user.name;
+      if (user.city) profile.location = user.city;
+      if (user.land_owned) profile.landAcres = user.land_owned;
+    }
+  } catch (e) {
+    console.error("Error parsing profile", e);
   }
+  return profile;
 }
 
 export function saveProfile(profile: FarmerProfile) {

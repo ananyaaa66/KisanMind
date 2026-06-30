@@ -28,9 +28,14 @@ function readAll(): ReportEntry[] {
 
 export async function syncReportsFromBackend() {
   try {
+    const userJson = localStorage.getItem("kisanmind_user");
+    if (!userJson) return;
+    const user = JSON.parse(userJson);
+    const userId = user.id;
+
     // dynamically import to avoid circular dependency issues if any
     const api = await import("./api");
-    const data = await api.getAllHistory();
+    const data = await api.getAllHistory(userId);
     if (data && data.success && data.reports) {
       const all: ReportEntry[] = [];
       

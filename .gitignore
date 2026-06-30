@@ -10,9 +10,8 @@ __pycache__/
 venv/
 *.egg-info/
 
-# ML model artifacts (retrain locally)
-Backend/data/
-*.pkl
+# ML model artifacts
+Backend/data/reports/
 
 # ChromaDB & SQLite
 chroma_db/

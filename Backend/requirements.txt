@@ -22,3 +22,5 @@ reportlab
 requests
 google-generativeai
 aiosqlite
+supabase
+langgraph-checkpoint-sqlite

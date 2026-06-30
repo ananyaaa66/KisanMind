@@ -128,11 +128,11 @@ def _load_real_dataset() -> pd.DataFrame | None:
     Returns None if the CSV doesn't exist or can't be parsed.
     """
     if not os.path.exists(DATASET_PATH):
-        print(f"⚠️  Dataset not found at {DATASET_PATH}, falling back to synthetic data.")
+        print(f"[Warning] Dataset not found at {DATASET_PATH}, falling back to synthetic data.")
         return None
 
     try:
-        print(f"📊 Loading real dataset from {DATASET_PATH}...")
+        print(f"[Data] Loading real dataset from {DATASET_PATH}...")
         df = pd.read_csv(DATASET_PATH)
 
         # Map commodity names to our canonical crop IDs
@@ -150,12 +150,9 @@ def _load_real_dataset() -> pd.DataFrame | None:
 
         # Extract features
         df["state"] = df["State"]
-        df["month"] = df["date"].dt.month
-        df["season"] = df["month"].apply(_get_season)
 
-        # Build training records: for each crop+state+date, compute
-        # the 30-day rolling average and the 7-day forward price
-        records = []
+        # Build training records using vectorized pandas operations (avoiding iterrows)
+        records_df_list = []
         for (crop, state), group in df.groupby(["crop", "state"]):
             group = group.sort_values("date")
             prices = group[["date", "price"]].drop_duplicates("date")
@@ -164,34 +161,43 @@ def _load_real_dataset() -> pd.DataFrame | None:
             if len(prices) < 10:
                 continue
 
+            prices["crop"] = crop
+            prices["state"] = state
             # Rolling 30-day average
             prices["avg_30d"] = prices["price"].rolling(window=30, min_periods=5).mean()
             # 7-day forward price
             prices["target_7d"] = prices["price"].shift(-7)
 
             valid = prices.dropna(subset=["avg_30d", "target_7d"])
-            for idx, row in valid.iterrows():
-                records.append({
-                    "crop": crop,
-                    "state": state,
-                    "month": idx.month,
-                    "season": _get_season(idx.month),
-                    "last_30d_avg_price": round(row["avg_30d"], 2),
-                    "target_price_7d": round(row["target_7d"], 2),
-                })
+            records_df_list.append(valid)
 
-        if len(records) < 100:
-            print(f"⚠️  Only {len(records)} records from real data, falling back to synthetic.")
+        if not records_df_list:
+            print("[Warning] No valid records could be constructed, falling back to synthetic data.")
             return None
 
-        result_df = pd.DataFrame(records)
-        print(f"✅ Loaded {len(records)} training records from real dataset.")
+        combined = pd.concat(records_df_list).reset_index()
+        combined["month"] = combined["date"].dt.month
+        combined["season"] = combined["month"].apply(_get_season)
+        
+        result_df = combined.rename(columns={
+            "avg_30d": "last_30d_avg_price",
+            "target_7d": "target_price_7d"
+        })[["crop", "state", "month", "season", "last_30d_avg_price", "target_price_7d"]]
+        
+        result_df["last_30d_avg_price"] = result_df["last_30d_avg_price"].round(2)
+        result_df["target_price_7d"] = result_df["target_price_7d"].round(2)
+
+        if len(result_df) < 100:
+            print(f"[Warning] Only {len(result_df)} records from real data, falling back to synthetic.")
+            return None
+
+        print(f"[Success] Loaded {len(result_df)} training records from real dataset.")
         print(f"   Crops: {sorted(result_df['crop'].unique())}")
         print(f"   States: {sorted(result_df['state'].unique())}")
         return result_df
 
     except Exception as e:
-        print(f"⚠️  Error loading dataset: {e}. Falling back to synthetic data.")
+        print(f"[Warning] Error loading dataset: {e}. Falling back to synthetic data.")
         return None
 
 
@@ -314,9 +320,9 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
     """
     # Auto-train if model doesn't exist
     if not os.path.exists(MODEL_PATH):
-        print("🧠 Training price prediction model for the first time...")
+        print("[Predictor] Training price prediction model for the first time...")
         metrics = train_model()
-        print(f"✅ Model trained: MAE=₹{metrics['mae']}, R²={metrics['r2_score']}")
+        print(f"[Success] Model trained: MAE=Rs.{metrics['mae']}, R2={metrics['r2_score']}")
 
     model = joblib.load(MODEL_PATH)
     encoders = joblib.load(ENCODERS_PATH)
@@ -333,7 +339,7 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
         crop_code = crop_enc.transform([crop_normalized])[0]
     else:
         # Find closest match or use fallback
-        print(f"⚠️  Unknown crop '{crop_normalized}', known: {known_crops}")
+        print(f"[Warning] Unknown crop '{crop_normalized}', known: {known_crops}")
         crop_code = 0
 
     # Handle unseen states — return error for states not in dataset
@@ -369,11 +375,11 @@ def predict(crop: str, state: str, month: int, last_price: float) -> dict:
 
 # ── CLI: Train the model independently ──
 if __name__ == "__main__":
-    print("🚀 Training KisanMind Price Prediction Model...")
+    print("[Predictor] Training KisanMind Price Prediction Model...")
     metrics = train_model()
-    print(f"✅ Done!")
-    print(f"   MAE: ₹{metrics['mae']} per quintal")
-    print(f"   R² Score: {metrics['r2_score']}")
+    print(f"[Success] Done!")
+    print(f"   MAE: Rs.{metrics['mae']} per quintal")
+    print(f"   R2 Score: {metrics['r2_score']}")
     print(f"   Train samples: {metrics['samples_trained']}")
     print(f"   Test samples: {metrics['samples_tested']}")
     print(f"   Saved to: {metrics['model_path']}")

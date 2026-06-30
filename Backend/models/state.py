@@ -63,6 +63,7 @@ class SchemeResult(BaseModel):
 class WeatherForecastDay(BaseModel):
     """Weather for a single day."""
     date: str
+    temp_c: Optional[float] = None          # Actual current temperature (today only)
     temp_min_c: float
     temp_max_c: float
     humidity_percent: float

@@ -19,7 +19,7 @@ from utils.llm_provider import get_llm
 
 load_dotenv()
 
-OWM_API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
+OWM_API_KEY = os.getenv("OPEN_WEATHERMAP_API_KEY") or os.getenv("OPENWEATHERMAP_API_KEY")
 OWM_BASE = "https://api.openweathermap.org/data/2.5"
 
 
@@ -56,6 +56,7 @@ def _parse_current(data: dict) -> WeatherForecastDay:
 
     return WeatherForecastDay(
         date=datetime.utcnow().strftime("%Y-%m-%d"),
+        temp_c=round(main.get("temp", 0), 1),     # Actual current temperature
         temp_min_c=main.get("temp_min", 0),
         temp_max_c=main.get("temp_max", 0),
         humidity_percent=main.get("humidity", 0),

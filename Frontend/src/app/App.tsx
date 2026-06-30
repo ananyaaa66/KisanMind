@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LayoutDashboard, Leaf, TrendingUp, FileText, Cloud, BarChart3, ChevronRight, Menu, Download, Settings } from "lucide-react";
+import { LayoutDashboard, Leaf, TrendingUp, FileText, Cloud, BarChart3, ChevronRight, Menu, Download, Settings, LogOut } from "lucide-react";
 import DashboardPage from "../screens/DashboardPage";
 import CropAnalysisPage from "../screens/CropAnalysisPage";
 import MarketForecastPage from "../screens/MarketForecastPage";
@@ -7,9 +7,12 @@ import GovernmentSchemesPage from "../screens/GovernmentSchemesPage";
 import WeatherPage from "../screens/WeatherPage";
 import ReportsPage from "../screens/ReportsPage";
 import SettingsPage from "../screens/SettingsPage";
+import Login from "../login/Login";
 import { useLanguage } from "../contexts/LanguageContext";
 import { getProfile } from "../utils/settingsStore";
 import { syncReportsFromBackend } from "../utils/reportStore";
+import MicButton from "../components/MicButton";
+import VoiceOverlay from "../components/VoiceOverlay";
 
 type PageId = "dashboard" | "crop" | "market" | "schemes" | "weather" | "reports" | "settings";
 
@@ -18,10 +21,24 @@ export default function App() {
   const profile = getProfile();
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [sessionId] = useState(() => "farmer_" + Math.random().toString(36).substring(2, 11));
+
+  // Auth state — check localStorage on mount
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return !!localStorage.getItem("kisanmind_user");
+  });
 
   React.useEffect(() => {
-    syncReportsFromBackend();
-  }, []);
+    if (isLoggedIn) {
+      syncReportsFromBackend();
+    }
+  }, [isLoggedIn]);
+
+  // If not logged in, show Login screen
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   const NAV_ITEMS: { id: PageId; labelKey: string; icon: any }[] = [
     { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
@@ -60,6 +77,11 @@ export default function App() {
     profile.location ? `${profile.location}, ${profile.state}` : t("dash.subtitle"),
     profile.landAcres ? `${profile.landAcres} Acres` : ""
   ].filter(Boolean);
+
+  function handleLogout() {
+    localStorage.removeItem("kisanmind_user");
+    setIsLoggedIn(false);
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
@@ -111,6 +133,13 @@ export default function App() {
           ))}
         </nav>
 
+        <div className="px-4 py-2 border-t border-border flex-shrink-0">
+          <button onClick={handleLogout} className="flex items-center gap-2 text-[12px] text-red-600 hover:text-red-700 w-full font-medium py-1">
+            <LogOut size={14} />
+            Logout
+          </button>
+        </div>
+
         <div className="px-4 py-3 border-t border-border flex-shrink-0">
           <div className="text-[11px] text-muted-foreground leading-relaxed">
             UP Agricultural Intelligence<br />
@@ -153,6 +182,14 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      <MicButton onClick={() => setVoiceOpen(true)} visible={!voiceOpen} />
+      <VoiceOverlay
+        voiceOpen={voiceOpen}
+        setVoiceOpen={setVoiceOpen}
+        setActivePage={setActivePage}
+        sessionId={sessionId}
+      />
     </div>
   );
 }
