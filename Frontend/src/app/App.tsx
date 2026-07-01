@@ -84,7 +84,7 @@ export default function App() {
 
   function handleLogout() {
     localStorage.removeItem("kisanmind_user");
-    setIsLoggedIn(false);
+    setAuthPhase("landing");
   }
 
   return (
