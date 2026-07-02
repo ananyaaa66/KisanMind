@@ -34,3 +34,5 @@ Dataset/
 *.csv
 
 catboost_info/
+setup_admin.py
+*test*.py

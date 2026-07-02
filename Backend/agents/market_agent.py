@@ -150,6 +150,18 @@ CRITICAL RULES:
         parsed["predicted_price_7d"] = ml_prediction.get("predicted_price")
         parsed["prediction_confidence"] = ml_prediction.get("confidence")
 
+        # Override the LLM's blind recommendation using the actual ML forecast math
+        predicted = parsed.get("predicted_price_7d")
+        if predicted and current_price:
+            if predicted > current_price * 1.02:
+                parsed["recommendation"] = "wait"
+                parsed["price_trend"] = "up"
+            elif predicted < current_price * 0.98:
+                parsed["recommendation"] = "sell_now"
+                parsed["price_trend"] = "down"
+            else:
+                parsed["price_trend"] = "stable"
+
         result = MarketResult(**parsed)
 
         elapsed = time.time() - start

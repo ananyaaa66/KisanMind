@@ -1,0 +1,42 @@
+import smtplib
+import os
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def send_email(to_email: str, subject: str, body: str):
+    """
+    Sends an email using SMTP.
+    Requires SMTP_USER and SMTP_PASSWORD to be set in the environment or .env file.
+    Defaults to Gmail's SMTP server.
+    """
+    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+
+    if not smtp_user or not smtp_password:
+        print("--- SMTP CREDENTIALS NOT CONFIGURED ---")
+        print("Please set SMTP_USER and SMTP_PASSWORD in Backend/.env to send real emails.")
+        print(f"Mocking email to: {to_email}")
+        print(f"Subject: {subject}")
+        print(f"Body: {body}")
+        print("---------------------------------------")
+        return
+
+    msg = MIMEMultipart()
+    msg['From'] = smtp_user
+    msg['To'] = to_email
+    msg['Subject'] = subject
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+        server.quit()
+        print(f"Successfully sent email to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        raise e

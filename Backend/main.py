@@ -13,7 +13,7 @@ Endpoints:
 import time
 import hashlib
 import json
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -32,6 +32,7 @@ from utils.image_handler import upload_to_base64, validate_image_size
 from utils.llm_provider import get_llm, get_provider_info
 from utils.pdf_generator import generate_pdf
 from utils.supabase_client import get_supabase
+from utils.email_client import send_email
 
 # ──────────────────────────────────────────────
 # App Setup
@@ -289,6 +290,128 @@ async def get_stats():
 
 
 # ──────────────────────────────────────────────
+# Admin Auth & Dashboard (Supabase)
+# ──────────────────────────────────────────────
+
+class AdminLoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/admin-login")
+async def admin_login(req: AdminLoginRequest):
+    """
+    Authenticate an admin against the 'admins' Supabase table.
+    """
+    try:
+        sb = get_supabase()
+        res = sb.table("admins").select("*").eq("email", req.email).execute()
+        if not res.data:
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        
+        admin = res.data[0]
+        stored_hash = admin.get("password_hash", "")
+        input_hash = hashlib.sha256(req.password.encode()).hexdigest()
+        
+        if stored_hash != input_hash:
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        
+        return {
+            "success": True,
+            "admin": {
+                "id": admin["id"],
+                "name": admin.get("name", "Admin"),
+                "email": admin["email"],
+                "role": admin.get("role", "admin"),
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Admin login failed: {str(e)}")
+
+
+@app.get("/admin/dashboard")
+async def admin_dashboard():
+    """
+    Admin dashboard data — real stats, all reports, and location distribution.
+    """
+    try:
+        sb = get_supabase()
+        
+        # Stats
+        users_res = sb.table("users").select("id", count="exact").execute()
+        total_farmers = users_res.count or 0
+        
+        reports_res = sb.table("reports").select("id", count="exact").execute()
+        total_reports = reports_res.count or 0
+        
+        # All reports with user info
+        all_reports_res = sb.table("reports").select("*").order("created_at", desc=True).limit(100).execute()
+        
+        # Get user names for the reports
+        user_ids = list(set([r.get("user_id") for r in (all_reports_res.data or []) if r.get("user_id")]))
+        user_map = {}
+        if user_ids:
+            users_data = sb.table("users").select("id, name, city").in_("id", user_ids).execute()
+            for u in (users_data.data or []):
+                user_map[u["id"]] = {"name": u.get("name", "Unknown"), "city": u.get("city", "")}
+        
+        reports = []
+        import re
+        
+        for r in (all_reports_res.data or []):
+            uid = r.get("user_id")
+            user_info = user_map.get(uid, {"name": "Unknown", "city": ""})
+            
+            markdown = r.get("report_markdown", "")
+            disease_match = re.search(r"Disease / रोग:\s*(.+)", markdown)
+            disease = disease_match.group(1).strip() if disease_match else "Unknown"
+            
+            severity_match = re.search(r"Severity / तीव्रता:\s*(.+)", markdown)
+            severity = "Low"
+            if severity_match:
+                sev_text = severity_match.group(1).lower()
+                if "high" in sev_text: severity = "High"
+                elif "medium" in sev_text: severity = "Medium"
+
+            reports.append({
+                "session_id": r.get("session_id", ""),
+                "crop": r.get("crop", ""),
+                "location": r.get("location", ""),
+                "query": r.get("query", ""),
+                "created_at": r.get("created_at", ""),
+                "user_name": user_info["name"],
+                "user_city": user_info["city"],
+                "disease": disease,
+                "severity": severity
+            })
+        
+        # Location distribution from reports
+        location_counts: dict = {}
+        for r in reports:
+            loc = r.get("location", "").strip()
+            if loc:
+                location_counts[loc] = location_counts.get(loc, 0) + 1
+        
+        location_distribution = [
+            {"location": loc, "count": count}
+            for loc, count in sorted(location_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
+        
+        return {
+            "success": True,
+            "stats": {
+                "total_farmers": total_farmers,
+                "total_reports": total_reports,
+            },
+            "reports": reports,
+            "location_distribution": location_distribution,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Admin dashboard failed: {str(e)}")
+
+
+# ──────────────────────────────────────────────
 # Auth Endpoints (Supabase)
 # ──────────────────────────────────────────────
 
@@ -304,12 +427,19 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ChangePasswordRequest(BaseModel):
+    user_id: Union[int, str]
+    new_password: str
+
 class OTPLoginRequest(BaseModel):
     phone: str
     otp: str
 
 class UpdateProfileRequest(BaseModel):
-    user_id: str
+    user_id: Union[int, str]
     name: str
     city: str
     state: str
@@ -359,6 +489,71 @@ async def register_user(req: RegisterRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+@app.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    """
+    Mock forgot password. Generates a new temporary password and updates the DB.
+    In production, this would send an email with a reset link.
+    """
+    try:
+        sb = get_supabase()
+        
+        # Check if user exists
+        result = sb.table("users").select("id").eq("email", req.email).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="No account found with this email")
+            
+        user_id = result.data[0]["id"]
+        
+        # Generate a temporary password
+        import random
+        import string
+        temp_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        
+        # Hash new password
+        pw_hash = hashlib.sha256(temp_password.encode()).hexdigest()
+        
+        # Update user
+        sb.table("users").update({"password_hash": pw_hash}).eq("id", user_id).execute()
+        
+        # Send actual email
+        subject = "Your KisanMind Temporary Password"
+        body = f"Hello,\n\nYour temporary password is: {temp_password}\n\nPlease login and change it from the Settings page immediately.\n\nThanks,\nKisanMind Team"
+        
+        send_email(to_email=req.email, subject=subject, body=body)
+        
+        return {
+            "success": True,
+            "message": "A temporary password has been sent to your email",
+            "temp_password": temp_password # Include this for easy testing in the demo
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Forgot password failed: {str(e)}")
+
+@app.post("/auth/change-password")
+async def change_password(req: ChangePasswordRequest):
+    """
+    Change user's password.
+    """
+    try:
+        sb = get_supabase()
+        pw_hash = hashlib.sha256(req.new_password.encode()).hexdigest()
+        
+        result = sb.table("users").update({"password_hash": pw_hash}).eq("id", req.user_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        return {"success": True, "message": "Password updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update password: {str(e)}")
+
 
 
 @app.post("/auth/login")
@@ -800,23 +995,33 @@ async def voice_chat(
         }
 
     # 2. RAG Context Collection
-    # Search past reports in ChromaDB
-    similar_docs = search_similar(query_text, n_results=3)
-    history_docs = get_history(session_id, limit=5)
-    
-    # Collect metadata like crop and location to fetch market prediction if query is market related
+    # To survive Render restarts, we fetch the actual report from Supabase instead of local ChromaDB
     crop_context = None
     location_context = None
+    reports_context = ""
     
-    # Try to extract crop/location from history metadata
-    if history_docs:
-        latest = history_docs[0]
-        meta = latest.get("metadata", {})
-        crop_context = meta.get("crop")
-        location_context = meta.get("location")
+    try:
+        sb = get_supabase()
+        res = sb.table("reports").select("*").eq("session_id", session_id).order("created_at", desc=True).limit(3).execute()
         
-    # Build ChromaDB reports context
-    reports_context = "\n---\n".join([doc["document"] for doc in similar_docs])
+        if res.data:
+            reports_from_db = [row.get("report_markdown") for row in res.data if row.get("report_markdown")]
+            reports_context = "\n---\n".join(reports_from_db)
+            crop_context = res.data[0].get("crop")
+            location_context = res.data[0].get("location")
+        else:
+            # Fallback to local ChromaDB if not found in Supabase
+            similar_docs = search_similar(query_text, n_results=3)
+            history_docs = get_history(session_id, limit=5)
+            reports_context = "\n---\n".join([doc["document"] for doc in similar_docs])
+            if history_docs:
+                crop_context = history_docs[0].get("metadata", {}).get("crop")
+                location_context = history_docs[0].get("metadata", {}).get("location")
+    except Exception as e:
+        print(f"Error fetching voice RAG context from Supabase: {e}")
+        # Fallback to ChromaDB
+        similar_docs = search_similar(query_text, n_results=3)
+        reports_context = "\n---\n".join([doc["document"] for doc in similar_docs])
     
     # Add market predictions if query mentions price, market, mandi, cost, sell, rate
     market_prediction_context = ""

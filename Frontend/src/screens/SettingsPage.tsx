@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, MapPin, Landmark, LandPlot, Save, Check, Languages, Brain } from "lucide-react";
+import { User, MapPin, Landmark, LandPlot, Save, Check, Languages, Brain, Key } from "lucide-react";
 import { PageHeader, SectionHeader } from "../components/Shared";
 import { getProfile, saveProfile, FarmerProfile } from "../utils/settingsStore";
 import { useLanguage, Lang } from "../contexts/LanguageContext";
@@ -11,6 +11,11 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [activeModel, setActiveModel] = useState("gemini");
   const [switchingModel, setSwitchingModel] = useState(false);
+
+  // Password state
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
 
   useEffect(() => {
     getModelInfo().then(info => {
@@ -50,6 +55,52 @@ export default function SettingsPage() {
     
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordMessage("Password must be at least 6 characters.");
+      return;
+    }
+    
+    setChangingPassword(true);
+    setPasswordMessage("");
+    
+    const userRaw = localStorage.getItem("kisanmind_user");
+    if (userRaw) {
+      try {
+        const user = JSON.parse(userRaw);
+        const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const res = await fetch(`${API}/auth/change-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: user.id,
+            new_password: newPassword
+          })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          setPasswordMessage("Password updated successfully!");
+          setNewPassword("");
+        } else {
+          setPasswordMessage(
+            typeof data.detail === "string"
+              ? data.detail
+              : Array.isArray(data.detail)
+              ? data.detail[0]?.msg || "Failed to update password."
+              : "Failed to update password."
+          );
+        }
+      } catch (e) {
+        console.error("Failed to change password:", e);
+        setPasswordMessage("An error occurred.");
+      }
+    } else {
+      setPasswordMessage("User not logged in.");
+    }
+    setChangingPassword(false);
   };
 
   const states = [
@@ -226,6 +277,42 @@ export default function SettingsPage() {
           >
             {saved ? <><Check size={13} /> {t("settings.saved")}</> : <><Save size={13} /> {t("settings.save")}</>}
           </button>
+        </div>
+      </section>
+
+      {/* Security Section */}
+      <section className="mb-12">
+        <SectionHeader index="04" title={lang === "en" ? "Security" : "सुरक्षा"} subtitle={lang === "en" ? "Manage your account security" : "अपने खाते की सुरक्षा प्रबंधित करें"} />
+        <div className="bg-[#fafafa] border border-border p-6 rounded-sm max-w-xl space-y-5">
+          <div>
+            <label className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-muted-foreground mb-1.5">
+              <Key size={11} /> {lang === "en" ? "New Password" : "नया पासवर्ड"}
+            </label>
+            <div className="flex gap-3">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder={lang === "en" ? "Enter new password" : "नया पासवर्ड दर्ज करें"}
+                className="w-full bg-background border border-border px-3 py-2 text-[13px] outline-none focus:border-[#2d5a1b] max-w-[280px]"
+              />
+              <button
+                onClick={handleChangePassword}
+                disabled={changingPassword || !newPassword}
+                className="flex items-center justify-center gap-2 px-5 py-2 text-[12.5px] font-medium transition-colors rounded-sm bg-foreground text-background hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+              >
+                {changingPassword ? (lang === "en" ? "Updating..." : "अपडेट हो रहा है...") : (lang === "en" ? "Change Password" : "पासवर्ड बदलें")}
+              </button>
+            </div>
+            {passwordMessage && (
+              <p className={`text-[12px] mt-2 ${passwordMessage.includes("success") ? "text-emerald-600" : "text-red-600"}`}>
+                {passwordMessage}
+              </p>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {lang === "en" ? "Choose a strong password with at least 6 characters." : "कम से कम 6 अक्षरों वाला एक मजबूत पासवर्ड चुनें।"}
+            </p>
+          </div>
         </div>
       </section>
     </div>

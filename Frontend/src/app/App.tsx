@@ -9,6 +9,7 @@ import ReportsPage from "../screens/ReportsPage";
 import SettingsPage from "../screens/SettingsPage";
 import Login from "../login/Login";
 import Landing from "../landing/landing";
+import AdminPortal from "../admin/AdminPortal";
 import { useLanguage } from "../contexts/LanguageContext";
 import { getProfile } from "../utils/settingsStore";
 import { syncReportsFromBackend } from "../utils/reportStore";
@@ -26,7 +27,7 @@ export default function App() {
   const [sessionId] = useState(() => "farmer_" + Math.random().toString(36).substring(2, 11));
 
   // Auth state
-  const [authPhase, setAuthPhase] = useState<"landing" | "login" | "app">(() => {
+  const [authPhase, setAuthPhase] = useState<"landing" | "login" | "app" | "admin">(() => {
     return localStorage.getItem("kisanmind_user") ? "app" : "landing";
   });
 
@@ -41,7 +42,11 @@ export default function App() {
   }
 
   if (authPhase === "login") {
-    return <Login onLogin={() => setAuthPhase("app")} />;
+    return <Login onLogin={() => setAuthPhase("app")} onAdminLogin={() => setAuthPhase("admin")} />;
+  }
+
+  if (authPhase === "admin") {
+    return <AdminPortal />;
   }
 
   const NAV_ITEMS: { id: PageId; labelKey: string; icon: any }[] = [
